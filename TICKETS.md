@@ -85,7 +85,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** tests cover the fallbacks, and a missing key gives a clear error only when a HarnessRouter call is attempted.
 
 ### T-06 · CI: ruff + pytest on PRs
-- **Status:** CLAIMED @NghiaNim 2026-11-18
+- **Status:** OPEN
 - **Track:** B · **Size:** S · **Depends on:** —
 - **Files:** `.github/workflows/ci.yml`
 - Use uv: `uv sync`, `uv run ruff check .`, `uv run pytest`. Live tests are skipped (no secret in CI).
