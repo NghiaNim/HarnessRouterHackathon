@@ -76,7 +76,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** both stores pass the same suite. **Ship SqliteStore early as its own PR**, because B and C build on it.
 
 ### T-05 · Config & identity
-- **Status:** CLAIMED @Odysseyc 2026-11-18
+- **Status:** IN REVIEW @Odysseyc PR #9
 - **Track:** B · **Size:** S · **Depends on:** —
 - **Files:** `hive/config.py`, `tests/test_config.py`
 - `Settings` loaded from `.env` (python-dotenv): key, project, store, api url.
