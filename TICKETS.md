@@ -374,7 +374,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   installer writes the deny rules.
 
 ### T-63 · Conflict gate on accept (no LLM needed)
-- **Status:** CLAIMED @NghiaNim 2026-11-18
+- **Status:** IN REVIEW @NghiaNim PR #27
 - **Track:** C (board) + A (detector) · **Size:** M · **Depends on:** T-17 (PR #20), T-10, T-48
 - Found hands-on (all open PRs merged): with "HTTP client is httpx: never requests" accepted on `hive/**`, the board let a human
   accept "Use requests for all HTTP calls" on `hive/**` **with no warning**. Both became binding, and **the brief injects both
