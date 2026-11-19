@@ -142,3 +142,4 @@ def test_recall_ranks_and_filters_by_kind(store):
     assert len(store.recall("httpx", limit=1)) == 1
     assert store.recall("kubernetes") == []
     assert store.recall("   ") == []
+    assert store.recall("is the") == []  # stopword-only

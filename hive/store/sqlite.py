@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS module_notes (
 """
 
 _WORD = re.compile(r"[a-z0-9_]{2,}")
+_STOPWORDS = frozenset(
+    "an and are as at be by do for from how in is it its of on or should the this to use we what when where "
+    "which who why with".split()
+)
 
 
 def _ts(dt: datetime) -> str:
@@ -48,6 +52,10 @@ def _ts(dt: datetime) -> str:
 
 def _terms(text: str) -> list[str]:
     return _WORD.findall(text.lower())
+
+
+def _query_terms(query: str) -> list[str]:
+    return list(dict.fromkeys(t for t in _terms(query) if t not in _STOPWORDS))
 
 
 class SqliteStore:
@@ -152,7 +160,7 @@ class SqliteStore:
 
     def recall(self, query: str, kinds: list[ItemKind] | None = None, limit: int = 8) -> list[RecallHit]:
         """Keyword score: fraction of query terms matched, plus a small bonus for repeated occurrences."""
-        q_terms = list(dict.fromkeys(_terms(query)))
+        q_terms = _query_terms(query)
         if not q_terms:
             return []
         wanted = set(kinds) if kinds else {"decision", "handoff", "module"}
