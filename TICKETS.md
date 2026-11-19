@@ -191,7 +191,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** a test proves that a `.env`-only `HIVE_STORE`/path is honored by `get_store()`, the API and the brief.
 
 ### T-10 · Decision lifecycle service
-- **Status:** IN REVIEW @Odysseyc PR #17
+- **Status:** DONE @Odysseyc PR #17
 - **Track:** A · **Size:** M · **Depends on:** T-04 (Sqlite)
 - **Files:** `hive/core/decisions.py`, `tests/test_decisions.py`
 - **Interface (agreed, because PR #15's API server and PR #13's brief composer already call it this way):** module-level functions that take
