@@ -33,6 +33,7 @@ indexers (Cursor, Augment, Sourcegraph) all store and retrieve notes. **Hive's w
 | Staleness | Rots silently | Rots silently | **Tied to commits.** Stale context is flagged or dropped. |
 | Agent harness | Tool-specific | Usually one | **Any harness** (Claude Code hooks, MCP, AGENTS.md), via HarnessRouter |
 | Secrets | Whatever you paste | Whatever the agent saves | **Redacted before anything leaves the machine** |
+| Prompt injection | N/A | Agent-saved notes can carry injected instructions | **Only human-quoted rules bind. Teammates' notes are fenced as data and screened** |
 
 ### The four pillars
 
