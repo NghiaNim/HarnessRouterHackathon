@@ -191,7 +191,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** a test proves that a `.env`-only `HIVE_STORE`/path is honored by `get_store()`, the API and the brief.
 
 ### T-69 · Make the dashboard self-explanatory: Home page + "what does an agent see?"
-- **Status:** OPEN
+- **Status:** CLAIMED @NghiaNim 2026-11-18
 - **Track:** C (orchestrator-built) · **Size:** M · **Depends on:** T-17
 - Team feedback (2026-11-18): *"we don't get what this app is doing."* The dashboard opens on a "Coming soon" Radar page, 4 of 5 nav
   items are placeholders, the jargon (decision/handoff/brief) is unexplained, and Hive's core action (injecting context into an
