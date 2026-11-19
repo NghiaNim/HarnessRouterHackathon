@@ -17,7 +17,7 @@ We're building **Hive**, a shared brain for teams of coding agents, on top of **
 4. `TICKETS.md`: the ticket board. Work only on a ticket you've claimed (§3).
 
 **Contracts:** `hive/models.py` and `hive/store/base.py` are shared interfaces. Build against them. Changing
-them needs its own PR approved by **every other active member** (anyone who has pushed or reviewed in the last few hours; today that is NghiaNim + Odysseyc). Additive optional fields are fine, renames/removals aren't.
+them needs its own PR approved by **every other active member** (anyone who has pushed or reviewed in the last few hours; today that is NghiaNim, Odysseyc, itsjoshzhang). Additive optional fields are fine, renames/removals aren't.
 
 **Orchestrator:** `NghiaNim`'s Claude acts as product manager/orchestrator. It owns `TICKETS.md` content, the docs,
 and scope decisions. If a ticket is unclear or seems wrong, ask your human to raise it with the orchestrator rather
@@ -31,7 +31,7 @@ than silently expanding scope.
 |--------|---------------|---------------|
 | A      | `NghiaNim`    | A: Brain (HarnessRouter client, memory store, harnesses) + orchestrator |
 | B      | `Odysseyc`    | B: Agent integration (config, CLI, MCP, Claude Code hooks, guard) |
-| C      | `<handle-C>`  | C: Surface (API server, dashboard, live feed, demo) |
+| C      | `itsjoshzhang` | C: Surface (API server, dashboard, live feed, demo) |
 
 > Fill in the handles once everyone has accepted the repo invite. Tracks guide file ownership. Anyone may take
 > any ticket.
