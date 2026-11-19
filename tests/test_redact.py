@@ -197,3 +197,75 @@ def test_redactor_obj_walks_nested_structures():
     out = r.redact_obj(obj)
     assert out["n"] == 3 and out["none"] is None
     assert GH_TOKEN not in json.dumps(out) and JWT not in json.dumps(out)
+
+
+SLACK = "xoxb-" + "1234567890-abcdefghij"
+GOOGLE = "AIza" + "SyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q"
+STRIPE = "sk_" + "live_" + "4eC39HqLyjWDarjtT1zdp7dc"
+BEARER = "Zm9vYmFyYmF6cXV4" + "MTIzNDU2Nzg5MA"
+
+
+@pytest.mark.parametrize(
+    ("text", "secret", "kind"),
+    [
+        (f"curl -H 'Authorization: Bearer {BEARER}'", BEARER, "bearer_token"),
+        ("DATABASE_URL=postgres://admin:" + "s3cr3tPw" + "@db/app", "s3cr3tPw", "url_password"),
+        (f"slack {SLACK}", SLACK, "slack_token"),
+        (f"maps {GOOGLE}", GOOGLE, "google_api_key"),
+        (f"stripe {STRIPE}", STRIPE, "stripe_key"),
+        ("password=correcthorsebattery", "correcthorsebattery", "password"),
+    ],
+)
+def test_review_shapes(text, secret, kind):
+    out = redact(text, env_values={})
+    assert secret not in out and f"[REDACTED:{kind}]" in out
+
+
+def test_redact_obj_uses_key_names():
+    r = Redactor(env_values={})
+    out = r.redact_obj(
+        {
+            "password": "letmein-123",
+            "nested": {"api_key": "abcd1234"},
+            "max_tokens": 4096,
+            "token_count": "12",
+            "title": "password policy",
+        }
+    )
+    assert out["password"] == "[REDACTED:password]"
+    assert out["nested"]["api_key"] == "[REDACTED:api_key]"
+    assert out["max_tokens"] == 4096 and out["token_count"] == "12" and out["title"] == "password policy"
+
+
+def test_secret_file_drop_also_clears_tool_use_result():
+    pw = "adm1n" + "Pa55"
+    lines = [
+        _line(
+            1,
+            "assistant",
+            [
+                {
+                    "type": "tool_use",
+                    "id": "t1",
+                    "name": "Read",
+                    "input": {"file_path": "/repo/.env.production"},
+                }
+            ],
+        ),
+        json.dumps(
+            {
+                "type": "user",
+                "uuid": "u2",
+                "message": {
+                    "role": "user",
+                    "content": [{"type": "tool_result", "tool_use_id": "t1", "content": f"OPAQUE_DB={pw}"}],
+                },
+                "toolUseResult": {
+                    "file": {"filePath": "/repo/.env.production", "content": f"OPAQUE_DB={pw}"}
+                },
+            }
+        ),
+    ]
+    out = redact_transcript("\n".join(lines), env_values={})
+    assert pw not in out
+    assert json.loads(out.splitlines()[1])["toolUseResult"] == "[REDACTED:secret-file]"

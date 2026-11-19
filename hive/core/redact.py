@@ -49,6 +49,11 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("aws_access_key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
     ("aws_secret", re.compile(r"(?i)(?<=aws_secret_access_key)(\s*[=:]\s*)[\"']?[A-Za-z0-9/+=]{30,}[\"']?")),
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")),
+    ("slack_token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}")),
+    ("google_api_key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}")),
+    ("stripe_key", re.compile(r"\b[sr]k_(?:live|test)_[0-9A-Za-z]{16,}")),
+    ("bearer_token", re.compile(r"(?i)(?<=\bbearer )[A-Za-z0-9._~+/=-]{16,}")),
+    ("url_password", re.compile(r"(?<=://)[^/\s:@]+:[^@\s/]+(?=@)")),
 ]
 
 # name = value, where name contains password/token/secret/api_key. Value must look like a credential:
@@ -62,6 +67,7 @@ _ASSIGNMENT = re.compile(
 # All-lowercase identifiers/dotted names are variables. Trade-off: an all-lowercase-letters password
 # (`password=letmein`) is not caught by this layer; real credentials nearly always have digits/case/symbols.
 _VARIABLE = re.compile(r"[a-z_][a-z_.]*")
+_SECRET_KEY = re.compile(r"(?i)(password|passwd|token|secret|api_?key|authorization|credential)")
 _CODE_LITERALS = frozenset({"none", "true", "false", "null", "undefined", "str", "bool", "optional"})
 
 _SECRET_NAME = re.compile(r"^(?:\.env(?:\..+)?|.+\.pem|id_[A-Za-z0-9_]+(?:\.pub)?)$")
@@ -111,23 +117,38 @@ class Redactor:
             value.isdigit()
             or value.lower() in _CODE_LITERALS
             or "[REDACTED" in value
-            or _VARIABLE.fullmatch(
-                value
-            )  # `budget_tokens=budget`, `token=self.token`: code, not a credential
+            # `budget_tokens=budget`, `token=self.token`: code, not a credential. Long all-lowercase values
+            # without `.`/`_` (`password=correcthorsebattery`) are still treated as secrets.
+            or (_VARIABLE.fullmatch(value) and ("." in value or "_" in value or len(value) <= 8))
         ):
             return m.group(0)
         kind = m.group("kind").lower().replace("passwd", "password").replace("apikey", "api_key")
         return f"{m.group('name')}{m.group('sep')}[REDACTED:{kind}]"
 
     def redact_obj(self, obj: Any) -> Any:
-        """Redact every string inside a JSON-like structure (keys are left alone)."""
+        """Redact every string inside a JSON-like structure. A string under a secret-looking key
+        (`{"password": "..."}`) is replaced outright, since parsing has removed the `password=` context."""
         if isinstance(obj, str):
             return self.redact(obj)
         if isinstance(obj, list):
             return [self.redact_obj(x) for x in obj]
         if isinstance(obj, dict):
-            return {k: self.redact_obj(v) for k, v in obj.items()}
+            return {k: self._redact_value(k, v) for k, v in obj.items()}
         return obj
+
+    def _redact_value(self, key: Any, value: Any) -> Any:
+        if isinstance(key, str) and isinstance(value, str):
+            m = _SECRET_KEY.search(key)
+            v = value.strip()
+            if (
+                m
+                and len(v) >= 4
+                and not v.isdigit()
+                and "[REDACTED" not in v
+                and v.lower() not in _CODE_LITERALS
+            ):
+                return f"[REDACTED:{m.group(1).lower()}]"
+        return self.redact_obj(value)
 
     def redact_transcript(self, jsonl: str) -> str:
         """Redact a Claude Code JSONL transcript; tool results of secret-file reads are replaced wholesale."""
@@ -146,6 +167,8 @@ class Redactor:
                     secret_tool_ids.add(block.get("id"))
                 elif block.get("type") == "tool_result" and block.get("tool_use_id") in secret_tool_ids:
                     block["content"] = SECRET_FILE_PLACEHOLDER
+                    if "toolUseResult" in event:  # Claude Code keeps a second copy of the file here
+                        event["toolUseResult"] = SECRET_FILE_PLACEHOLDER
             out.append(json.dumps(self.redact_obj(event), ensure_ascii=False))
         return "\n".join(out) + ("\n" if out else "")
 
