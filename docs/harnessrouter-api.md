@@ -35,6 +35,12 @@ We use it for two things:
 | `GET /v1/harnesses` | Configured agents in our workspace. |
 | `GET /v1/harnesses/{id}/models` | Models allowed for one harness. |
 
+**Response envelopes differ per endpoint (verified ✅ 2026-11-18, T-02).** `HRClient` unwraps them for you:
+- `GET /v1/bases` → `{"bases": [...], "runtimeDefaults": {...}, "capabilities": {...}}`
+- `GET /v1/models` → `{"backends": {"<backend>": {"default": "<model>", "models": [...]}}}`
+- `GET /v1/harnesses` → `{"harnesses": [...]}`. Fields come back **camelCase** (`defaultModel`, `systemPrompt`, …).
+- `GET /v1/memories`, `GET /v1/memories/providers` → `{"object": "list", "data": [...]}`
+
 ## Harnesses (configured agents)
 
 `POST /v1/harnesses`, `GET/PUT/DELETE /v1/harnesses/{id}`
