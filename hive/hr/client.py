@@ -77,6 +77,15 @@ def _pick(body: Any, key: str) -> Any:
     return body[key] if isinstance(body, dict) and key in body else body
 
 
+def _rejected_before_work(e: Exception) -> bool:
+    return (
+        isinstance(e, HRError)
+        and 400 <= e.status < 500
+        and e.status not in (408, 429)
+        and e.code not in _NO_RETRY_CODES
+    )
+
+
 def _response_text(resp: dict) -> str:
     if isinstance(resp.get("output_text"), str):
         return resp["output_text"]
@@ -258,7 +267,15 @@ class HRClient:
         max_cost = opts.get("max_cost_usd")
         if self.ledger is not None:
             self.ledger.check(max_cost)
-        result = self._run(harness_id, input, stream=stream, **opts)
+        try:
+            result = self._run(harness_id, input, stream=stream, **opts)
+        except Exception as e:
+            # The request may have gone out and the work may have run (5xx, timeout, dropped stream,
+            # store_write_failed): count an upper bound so retries can't spend without limit. A clean 4xx
+            # rejection (bad input, auth) means nothing ran.
+            if self.ledger is not None and not _rejected_before_work(e):
+                self.ledger.record_run(harness_id, None, max_cost_usd=max_cost, status="error")
+            raise
         if self.ledger is not None:
             self.ledger.record_run(
                 harness_id,

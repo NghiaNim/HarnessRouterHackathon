@@ -90,7 +90,8 @@ def test_run_records_reported_cost(ledger):
 
 
 @respx.mock
-def test_run_without_reported_cost_records_upper_bound(ledger):
+def test_run_without_reported_cost_records_upper_bound(tmp_path):
+    ledger = SpendLedger(tmp_path / "s.jsonl", daily_budget_usd=5.0)
     respx.post(f"{BASE}/chrn_1/v1/responses").respond(json={"id": "r", "status": "completed"})
     client_with(ledger).run("chrn_1", "hi", max_cost_usd=0.4)
     client_with(ledger).run("chrn_1", "hi")
@@ -129,3 +130,44 @@ def test_failed_http_run_records_nothing(ledger):
         client_with(ledger).run("chrn_1", "")
     assert ledger.entries() == []
     assert json.dumps(ledger.by_harness()) == "{}"
+
+
+def test_check_without_max_cost_projects_the_harness_cap(tmp_path):
+    led = SpendLedger(tmp_path / "s.jsonl", daily_budget_usd=5.0)
+    led.record("h", 4.5, estimated=False)
+    with pytest.raises(BudgetExceeded):
+        led.check()  # no max_cost_usd: assume $1, so 4.5 + 1 > 5
+    led.check(0.25)
+
+
+@pytest.mark.parametrize("bad", ["nan", "inf", "-1"])
+def test_from_env_rejects_non_finite_or_negative(monkeypatch, bad):
+    monkeypatch.setenv("HIVE_DAILY_BUDGET_USD", bad)
+    with pytest.raises(ValueError, match="finite, non-negative"):
+        SpendLedger.from_env()
+
+
+@respx.mock
+def test_run_that_fails_after_sending_is_recorded_as_upper_bound(ledger):
+    respx.post(f"{BASE}/chrn_1/v1/responses").mock(
+        return_value=httpx.Response(504, json={"error": {"code": "timeout"}})
+    )
+    with pytest.raises(HRError):
+        client_with(ledger).run("chrn_1", "hi", max_cost_usd=0.3)
+    [entry] = ledger.entries()
+    assert (entry["cost_usd"], entry["estimated"], entry["status"]) == (0.3, True, "error")
+
+
+@respx.mock
+def test_store_write_failed_and_transport_errors_are_recorded(ledger):
+    respx.post(f"{BASE}/chrn_1/v1/responses").mock(
+        side_effect=[
+            httpx.Response(502, json={"error": {"code": "store_write_failed"}}),
+            httpx.ConnectError("x"),
+        ]
+        + [httpx.ConnectError("x")] * 5
+    )
+    for _ in range(2):
+        with pytest.raises((HRError, httpx.TransportError)):
+            client_with(ledger).run("chrn_1", "hi", max_cost_usd=0.1)
+    assert [e["status"] for e in ledger.entries()] == ["error", "error"]

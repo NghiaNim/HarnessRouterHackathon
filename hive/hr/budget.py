@@ -6,11 +6,17 @@ appended to a JSONL ledger afterwards. Cost = the response's own cost/usage fiel
 costs are flagged `estimated: true`.
 
 Config: `HIVE_DAILY_BUDGET_USD` (default 5), `HIVE_SPEND_PATH` (default `~/.cache/hive/spend.jsonl`).
+
+The ledger is **per machine**: three teammates sharing one workspace key means up to 3 x the budget per
+day, and concurrent hook processes on one machine can race the check. It is a seatbelt, not a team cap
+(T-68 adds that).
+TODO: read settings via `hive.config.get_settings()` once T-05 (#9) lands.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 from collections import defaultdict
@@ -64,6 +70,10 @@ class SpendLedger:
             budget = float(raw_budget) if raw_budget else DEFAULT_DAILY_BUDGET_USD
         except ValueError as e:
             raise ValueError(f"HIVE_DAILY_BUDGET_USD must be a number, got {raw_budget!r}") from e
+        if not math.isfinite(budget) or budget < 0:  # `nan` would make every comparison False: guard off
+            raise ValueError(
+                f"HIVE_DAILY_BUDGET_USD must be a finite, non-negative number, got {raw_budget!r}"
+            )
         return cls(os.environ.get("HIVE_SPEND_PATH") or DEFAULT_PATH, budget)
 
     # --- write ---------------------------------------------------------------
@@ -131,7 +141,8 @@ class SpendLedger:
     def check(self, projected_usd: float | None = None) -> None:
         """Raise BudgetExceeded if today's spend plus this run's projected cost would pass the budget."""
         spent = self.total()
-        projected = projected_usd or 0.0
+        # same fallback as record_run: an unbounded run is assumed to cost the harness cap
+        projected = DEFAULT_UPPER_BOUND_USD if projected_usd is None else projected_usd
         if spent >= self.daily_budget_usd or spent + projected > self.daily_budget_usd:
             raise BudgetExceeded(spent, self.daily_budget_usd, projected)
 
