@@ -78,6 +78,7 @@ h2 { font-size: 22px; }
 .topbar nav a[aria-current="page"] { background: var(--ink); color: var(--bg); }
 .me { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; }
 .me input { width: 170px; }
+.me-hint { font-size: 13px; }
 
 main { padding: 28px; max-width: 1600px; margin: 0 auto; }
 
