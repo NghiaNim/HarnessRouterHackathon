@@ -583,6 +583,16 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   status shows on the dashboard (`GET /api/health` checks the key, models and a cheap call).
 - **Done when:** with `FakeHRClient` raising `HRError(402, "no_key")`, every command still exits 0 with a clear degraded message.
 
+### T-68 · Team-wide spend: `/api/spend` + a shared daily cap
+- **Status:** OPEN
+- **Track:** C · **Size:** S · **Depends on:** T-26 (PR #21), T-16, T-34 for the shared server
+- T-26's ledger is **per machine**, but the workspace key is shared by 3 people, so the effective cap is 3 × the daily budget and nobody sees the
+  total (raised in PR #21's review). Expose `GET /api/spend` (today per member and per harness, from `format_spend`/`by_harness`). Machines report their
+  runs to the shared server (fire-and-forget POST `/api/spend/runs`), and the server enforces `HIVE_TEAM_DAILY_BUDGET_USD` by returning a
+  "budget exhausted" flag that `check()` honors when the server is reachable. Each machine's local cap still applies offline.
+  Add a spend tile to the Impact page next to the tokens-saved strip.
+- **Done when:** runs from two machines (simulate with two ledger dirs) add up on `/api/spend`, and the team cap blocks the third run.
+
 ## M3 · Demo & polish
 
 ### T-30 · Demo scenario + seed script
