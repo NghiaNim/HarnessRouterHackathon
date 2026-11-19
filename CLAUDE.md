@@ -17,7 +17,7 @@ We're building **Hive**, a shared brain for teams of coding agents, on top of **
 4. `TICKETS.md`: the ticket board. Work only on a ticket you've claimed (§3).
 
 **Contracts:** `hive/models.py` and `hive/store/base.py` are shared interfaces. Build against them. Changing
-them needs its own PR reviewed by both other members (additive optional fields are fine, renames/removals aren't).
+them needs its own PR approved by **every other active member** (anyone who has pushed or reviewed in the last few hours; today that is NghiaNim + Odysseyc). Additive optional fields are fine, renames/removals aren't.
 
 **Orchestrator:** `NghiaNim`'s Claude acts as product manager/orchestrator. It owns `TICKETS.md` content, the docs,
 and scope decisions. If a ticket is unclear or seems wrong, ask your human to raise it with the orchestrator rather

@@ -109,7 +109,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 
 ### T-08 · Contract addition: `HiveEvent`, `BriefLog`, `Intent`, evidence fields
 - **Status:** IN REVIEW @NghiaNim PR #12
-- **Track:** any · **Size:** S · **Depends on:** — (contract PR, so both others review) · **Blocks the M1.5 differentiators, so do it soon**
+- **Track:** any · **Size:** S · **Depends on:** — (contract PR, so all other active members review) · **Blocks the M1.5 differentiators, so do it soon**
 - **Files:** `hive/models.py`, `hive/store/base.py`, `tests/test_contract.py`
 - `HiveEvent(id, type: decision_proposed|decision_accepted|decision_rejected|handoff_written|brief_served|check_run|
   collision_warned|question_answered, actor, ref_id, at, summary)` for the live feed (T-23) and impact counters.
@@ -120,7 +120,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   `Handoff.transcript_file_id: str|None` (the HarnessRouter file id of the trimmed transcript, used by `hive ask`, T-53).
 - New store methods: `log_event`, `list_events(since, limit)`, `put_intent` (upsert), and
   `list_intents(active_within_minutes=15)`. These are additive only.
-- **Done when:** merged with approval from both other members, and the stores (T-04/T-09/T-52) know they need to implement it.
+- **Done when:** merged with approval from all other active members, and the stores (T-04/T-09/T-52) know they need to implement it.
 
 ---
 
@@ -253,6 +253,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Status:** OPEN
 - **Track:** A · **Size:** S · **Depends on:** T-08, T-04, T-09
 - **Files:** `hive/store/sqlite.py`, `hive/store/memory.py`
+- **SqliteStore half already ships in PR #12 (T-08)**, so this ticket is the HarnessMemoryStore half only (do it with or after T-09).
 - `put_intent` upserts by `(member, branch)`. In the memory store, use an `intents` child memory with one record per member+branch
   that is PATCHed, not appended (keep memory ops low). `list_intents(active_within_minutes)` filters by heartbeat.
 - **Done when:** the contract test suite covers intents for both stores.
