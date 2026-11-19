@@ -186,7 +186,7 @@ def test_human_rejects_with_a_reason(client, store):
 
 
 @pytest.mark.parametrize("action", ["accept", "reject"])
-@pytest.mark.parametrize("by", ["agent:bob", "Agent:bob", "  agent:bob"])
+@pytest.mark.parametrize("by", ["agent:bob", "Agent:bob", "  agent:bob", "agent :bob", "agent：bob"])
 def test_agents_can_never_accept_or_reject(client, store, action, by):
     r = client.post(f"/api/decisions/d-browser/{action}", json={"by": by})
     assert r.status_code == 403
@@ -375,3 +375,58 @@ def test_module_level_app_exposes_the_routes():
         "/api/recall",
         "/api/brief",
     }
+
+
+def test_service_validation_error_is_422_without_pydantic_internals(store):
+    class Sloppy(FakeDecisions):
+        def propose(self, **fields):
+            return Decision(**{**fields, "title": "x" * 301})
+
+    client = TestClient(create_app(store=store, decisions=Sloppy(store)))
+    r = client.post("/api/decisions", json={"title": "t", "statement": "s", "proposed_by": "bob"})
+    assert r.status_code == 422
+    assert r.json()["detail"] == "The decision is not valid."
+
+
+def test_optional_module_only_swallows_the_module_itself(monkeypatch):
+    from hive.api import app as app_module
+
+    def missing(name):
+        def fake_import(_):
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+
+        return fake_import
+
+    monkeypatch.setattr(app_module.importlib, "import_module", missing("hive.core.decisions"))
+    assert app_module._optional_module("hive.core.decisions") is None
+    monkeypatch.setattr(app_module.importlib, "import_module", missing("hive.core"))
+    assert app_module._optional_module("hive.core.decisions") is None
+    monkeypatch.setattr(app_module.importlib, "import_module", missing("hive.core.dec"))
+    with pytest.raises(ModuleNotFoundError):
+        app_module._optional_module("hive.core.decisions")
+    monkeypatch.setattr(app_module.importlib, "import_module", missing("some_dependency"))
+    with pytest.raises(ModuleNotFoundError):
+        app_module._optional_module("hive.core.decisions")
+
+
+def test_store_is_built_once_when_first_requests_race(monkeypatch):
+    import threading
+    import time
+
+    import hive.store
+
+    built = []
+
+    def slow_build():
+        time.sleep(0.05)
+        built.append(SqliteStore(":memory:"))
+        return built[-1]
+
+    monkeypatch.setattr(hive.store, "get_store", slow_build)
+    client = TestClient(create_app())
+    threads = [threading.Thread(target=client.get, args=("/api/decisions",)) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(built) == 1

@@ -18,18 +18,21 @@ it, and this layer refuses an `agent:` actor on accept/reject before the service
 from __future__ import annotations
 
 import importlib
+import re
+import threading
 from collections.abc import Callable
 from datetime import datetime
 from types import ModuleType
 from typing import Annotated, Any, Protocol
 
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from hive.models import Brief, Decision, DecisionStatus, Handoff, ItemKind, ModuleNote, RecallHit
 from hive.store.base import ContextStore, NotFound
 
-AGENT_PREFIX = "agent:"
+# An agent actor: "agent:bob", tolerant of case, padding and a full-width colon.
+_AGENT_ACTOR = re.compile(r"\s*agent\s*[:\uff1a]", re.IGNORECASE)
 
 
 class DecisionService(Protocol):
@@ -67,7 +70,7 @@ def _optional_module(name: str) -> ModuleType | None:
     try:
         return importlib.import_module(name)
     except ModuleNotFoundError as e:
-        if e.name and name.startswith(e.name):
+        if e.name and (name == e.name or name.startswith(e.name + ".")):
             return None
         raise
 
@@ -110,7 +113,7 @@ class RejectIn(_Actor):
 
 
 def _require_human(by: str) -> None:
-    if by.lower().startswith(AGENT_PREFIX):
+    if _AGENT_ACTOR.match(by):
         raise HTTPException(403, "Agents may propose decisions, but only humans accept or reject them.")
 
 
@@ -122,32 +125,37 @@ def create_app(
     """Build the API. Anything not passed in is resolved lazily on first use."""
     app = FastAPI(title="Hive API", version="0.1.0")
     resolved: dict[str, Any] = {"store": store, "decisions": decisions, "compose_brief": compose_brief}
+    # Handlers run in a threadpool: build each collaborator once, even if the first requests race.
+    lock = threading.RLock()
 
     def get_store() -> ContextStore:
-        if resolved["store"] is None:
-            from hive.store import get_store as build_store
+        with lock:
+            if resolved["store"] is None:
+                from hive.store import get_store as build_store
 
-            try:
-                resolved["store"] = build_store()
-            except (RuntimeError, ValueError) as e:
-                raise HTTPException(503, f"Store unavailable: {e}") from e
-        return resolved["store"]
+                try:
+                    resolved["store"] = build_store()
+                except (RuntimeError, ValueError) as e:
+                    raise HTTPException(503, f"Store unavailable: {e}") from e
+            return resolved["store"]
 
     def get_decisions() -> DecisionService:
-        if resolved["decisions"] is None:
-            module = _optional_module("hive.core.decisions")
-            if module is None:
-                raise HTTPException(503, "Decision lifecycle (hive.core.decisions) is not available yet.")
-            resolved["decisions"] = _CoreDecisions(module, get_store())
-        return resolved["decisions"]
+        with lock:
+            if resolved["decisions"] is None:
+                module = _optional_module("hive.core.decisions")
+                if module is None:
+                    raise HTTPException(503, "Decision lifecycle (hive.core.decisions) is not available yet.")
+                resolved["decisions"] = _CoreDecisions(module, get_store())
+            return resolved["decisions"]
 
     def get_brief_composer() -> BriefComposer:
-        if resolved["compose_brief"] is None:
-            module = _optional_module("hive.core.brief")
-            if module is None:
-                raise HTTPException(503, "Brief composer (hive.core.brief) is not available yet.")
-            resolved["compose_brief"] = module.compose_brief
-        return resolved["compose_brief"]
+        with lock:
+            if resolved["compose_brief"] is None:
+                module = _optional_module("hive.core.brief")
+                if module is None:
+                    raise HTTPException(503, "Brief composer (hive.core.brief) is not available yet.")
+                resolved["compose_brief"] = module.compose_brief
+            return resolved["compose_brief"]
 
     def lifecycle(call: Callable[[], Decision]) -> Decision:
         """Run a lifecycle call, turning its failures into HTTP errors."""
@@ -157,6 +165,9 @@ def create_app(
             raise HTTPException(404, "Decision not found.") from e
         except PermissionError as e:
             raise HTTPException(403, str(e)) from e
+        except ValidationError as e:
+            # A ValueError subclass: keep it out of the 409 arm, and keep pydantic internals out of the reply.
+            raise HTTPException(422, "The decision is not valid.") from e
         except ValueError as e:
             raise HTTPException(409, str(e)) from e
 
