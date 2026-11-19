@@ -116,7 +116,7 @@ def main() -> None:
     if a.cmd == "list":
         sh("git", "fetch", "origin", "main")
         text = sh("git", "show", "origin/main:TICKETS.md").stdout
-        for tid, status, title in board(text):
+        for _tid, status, title in board(text):
             if not a.open or status.startswith("OPEN"):
                 print(f"{status:<32} {title}")
         return
