@@ -190,6 +190,20 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Priority:** do this right after PR #19 merges. It's the single resolver both the CLI and the API switch to.
 - **Done when:** a test proves that a `.env`-only `HIVE_STORE`/path is honored by `get_store()`, the API and the brief.
 
+### T-69 · Make the dashboard self-explanatory: Home page + "what does an agent see?"
+- **Status:** OPEN
+- **Track:** C (orchestrator-built) · **Size:** M · **Depends on:** T-17
+- Team feedback (2026-11-18): *"we don't get what this app is doing."* The dashboard opens on a "Coming soon" Radar page, 4 of 5 nav
+  items are placeholders, the jargon (decision/handoff/brief) is unexplained, and Hive's core action (injecting context into an
+  agent at session start) is **invisible**.
+- Home page at `/`: a one-sentence pitch, then a 4-step "how it works" (you correct your agent → a human approves → every agent starts
+  informed → mistakes get caught), each with a live count and a link. Plus **"See what an agent is told"**: pick a teammate and a file,
+  and render the exact briefing text plus token count. Plus recent session notes and active rules.
+- Plain-language labels: Decisions → **Team rules**, Proposed → **Waiting for a human**, Accepted → **Active rules**, Superseded →
+  **Replaced**, Timeline → **Session notes**, "You are" → **Your name** (needed to approve). Unbuilt sections are dimmed with a *soon* pill.
+- **Load example data** button (only when the store is empty) seeds a small realistic story, so a fresh dashboard explains itself.
+- **Done when:** a newcomer opening `/` can say what Hive does in one sentence, and the briefing preview shows the active rule for a matching file.
+
 ### T-10 · Decision lifecycle service
 - **Status:** DONE @Odysseyc PR #17
 - **Track:** A · **Size:** M · **Depends on:** T-04 (Sqlite)
