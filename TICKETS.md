@@ -102,7 +102,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** a PR shows a green check.
 
 ### T-07 · Test fakes & fixtures (unblocks B and C without live calls)
-- **Status:** IN REVIEW @NghiaNim PR #11
+- **Status:** DONE @NghiaNim PR #11
 - **Track:** A · **Size:** S · **Depends on:** — (match T-02's method names; coordinate in the PR)
 - **Files:** `tests/fakes.py`, `tests/conftest.py`, `tests/fixtures/` (sample transcript JSONL, sample diff, seed decisions)
 - `FakeHRClient` with canned `run()` outputs keyed by harness name, and an in-memory `ContextStore` fixture
