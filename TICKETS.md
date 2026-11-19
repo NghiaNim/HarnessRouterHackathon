@@ -203,9 +203,18 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   and the browser never sees it.
 - **Done when:** it is tested with FastAPI TestClient on SqliteStore.
 
+### T-27 · Dashboard shell: layout, nav, static assets
+- **Status:** OPEN
+- **Track:** C · **Size:** S · **Depends on:** T-16
+- **Files:** `hive/web/templates/base.html`, `hive/web/static/app.css`, `hive/web/static/app.js`, page routes in `hive/api/app.py`
+- Jinja `base.html` with a nav (Radar · Decisions · Timeline · Ask · Impact), HTMX and the SSE extension pinned from a CDN,
+  light/dark CSS tokens, and an empty-state partial. The T-17, T-18, T-24, T-55 pages each `{% extends "base.html" %}`, so they
+  never edit the same template. Make it projector-legible (big type, high contrast).
+- **Done when:** `/` renders the shell with nav, and each nav item shows a "coming soon" placeholder.
+
 ### T-17 · Dashboard: decisions board (human-in-the-loop)
 - **Status:** CLAIMED @itsjoshzhang 2026-11-18
-- **Track:** C · **Size:** M · **Depends on:** T-16
+- **Track:** C · **Size:** M · **Depends on:** T-27, T-16
 - **Files:** `hive/web/templates/*`, `hive/web/static/*`, routes in `hive/api/app.py`
 - Columns: Proposed / Accepted / Superseded. Accept and reject buttons (HTMX), and a "proposed by agent:x" badge,
   scope chips, and a supersede link. Plus a form to add a decision directly as a human.
@@ -213,9 +222,19 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 
 ### T-18 · Dashboard: team timeline (handoffs)
 - **Status:** OPEN
-- **Track:** C · **Size:** S · **Depends on:** T-16
+- **Track:** C · **Size:** S · **Depends on:** T-27, T-16
 - A feed of handoffs per member and branch, with expandable learned/gotchas/open questions. Link to the HarnessRouter
   session share link when there is one.
+
+### T-29 · End-to-end smoke test of the MVP loop
+- **Status:** OPEN
+- **Track:** any · **Size:** S · **Depends on:** T-10, T-11, T-12, T-15 (add steps as each lands)
+- **Files:** `tests/test_e2e_loop.py`
+- On `SqliteStore(':memory:')` + `FakeHRClient`: a human accepts a decision; a fixture transcript with a correction goes
+  through `hive handoff`, which produces a handoff and a proposed decision with evidence; a human accepts it; then `hive brief` for
+  a second member on an in-scope path contains **both** rules and the handoff, within budget. Add `hive check` once T-20
+  lands. This test is the demo script in code, so if it's green, the demo works.
+- **Done when:** it runs in CI in under 5s with no network.
 
 ### T-19 · Hook resilience: fail open, fast, cached
 - **Status:** OPEN
@@ -286,7 +305,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 
 ### T-55 · Radar: who's working where (dashboard)
 - **Status:** OPEN
-- **Track:** C · **Size:** M · **Depends on:** T-16, T-52 (poll first, then live via T-23)
+- **Track:** C · **Size:** M · **Depends on:** T-27, T-16, T-52 (poll first, then live via T-23)
 - **Files:** `hive/web/templates/radar.html`, route in `hive/api/app.py` (`GET /api/intents`)
 - A directory tree with each active member's paths highlighted in their color. Overlaps (collisions) are red, and each one links to
   the ticket and the last heartbeat. This is **the opening shot of the demo**, so make it legible on a projector.
