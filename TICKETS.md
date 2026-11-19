@@ -82,6 +82,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Redaction (T-28, PR #18):** pass every outbound string through `hive.core.redact.Redactor` (record title/content/attributes before `write_record`/`patch_record`) and assert it in a test.
 - Follow the mapping table in ARCHITECTURE.md. Store the model JSON in `attributes` so it round-trips exactly. Use the
   `decisions`/`handoffs`/`intents`/`codebase` children under the project root memory, with the provider chosen in T-01.
+- **Redaction (T-28):** every outbound payload (harness input, uploaded file, memory record) goes through `hive.core.redact`. Add a test that a seeded `sk-hr-…` never reaches the fake client or store.
 - **Done when:** it passes the same contract suite with `HIVE_LIVE=1`, and `HIVE_STORE=memory` works end to end for `hive decisions`.
 - `DecisionService.accept` writes the new decision **then** the superseded one, without a transaction. Keep that order, and if the memory API
   offers a batch write, use it (from PR #17's review).
@@ -237,6 +238,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   with `evidence` = the verbatim user quote and `scope` inferred from the files being edited at that moment. Agent opinions
   are **not** proposals. Only human words are.
 - Also upload the trimmed transcript (`POST /v1/files`) and set `Handoff.transcript_file_id` (for `hive ask`, T-53).
+- **Redaction (T-28):** every outbound payload (harness input, uploaded file, memory record) goes through `hive.core.redact`. Add a test that a seeded `sk-hr-…` never reaches the fake client or store.
 - **Done when:** a fixture transcript with 2 human corrections and 1 agent opinion gives exactly 2 proposed decisions with
   correct evidence quotes (fake client in the test, one live run recorded in the PR).
 
@@ -363,6 +365,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   with `transcript_file_id`), then run the `hive-oracle` harness to get an answer **with citations** (handoff id or transcript quote).
   If the evidence doesn't answer the question, the oracle must say "not in Bob's context". No guessing. Follow-ups continue the same
   HarnessRouter session (`previous_response_id`). Log a `question_answered` event that the member can see on the dashboard.
+- **Redaction (T-28):** every outbound payload (harness input, uploaded file, memory record) goes through `hive.core.redact`. Add a test that a seeded `sk-hr-…` never reaches the fake client or store.
 - **Done when:** a fixture handoff and transcript answer "why did you change X?" with a citation, and an unrelated question gets
   "not in context".
 
@@ -554,7 +557,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 ### T-40 · Slack/thread import → proposed decisions
 - **Status:** OPEN
 - **Track:** A · **Size:** M · **Depends on:** T-15
-- `hive import-thread < thread.txt` runs the distiller in "extract decisions" mode and proposes them with `source` set.
+- `hive import-thread < thread.txt` runs the distiller in "extract decisions" mode and proposes them with `source` set. Pasted threads are redacted first (T-28).
 
 ### T-41 · Guard as a GitHub Action PR comment
 - **Status:** OPEN
