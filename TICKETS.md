@@ -82,6 +82,8 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - Follow the mapping table in ARCHITECTURE.md. Store the model JSON in `attributes` so it round-trips exactly. Use the
   `decisions`/`handoffs`/`intents`/`codebase` children under the project root memory, with the provider chosen in T-01.
 - **Done when:** it passes the same contract suite with `HIVE_LIVE=1`, and `HIVE_STORE=memory` works end to end for `hive decisions`.
+- `DecisionService.accept` writes the new decision **then** the superseded one, without a transaction. Keep that order, and if the memory API
+  offers a batch write, use it (from PR #17's review).
 
 ### T-05 · Config & identity
 - **Status:** IN REVIEW @Odysseyc PR #9
@@ -134,7 +136,8 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   the store as a keyword argument.
   `propose(*, title, statement, proposed_by, rationale="", scope=["**"], tags=[], source=None, evidence=None, supersedes=None, store) -> Decision`,
   `accept(decision_id, by, *, store) -> Decision`, `reject(decision_id, by, reason, *, store) -> Decision`,
-  `supersede(old_id, new: Decision, *, by, store) -> Decision`, `in_scope(paths, *, store) -> list[Decision]` (accepted only).
+  `supersede(old_id, new_statement, *, proposed_by, store, **fields) -> Decision` (proposes a replacement; old stays binding until accepted),
+  `in_scope(paths=None, *, store) -> list[Decision]` (accepted only). Implementation: `DecisionService(store)` (PR #17); the functions are thin wrappers.
   Errors: `hive.store.base.NotFound` (unknown id), `PermissionError` (agent actor), `ValueError` (invalid transition).
   If you need to deviate, comment on PR #15 so the adapter in `hive/api/app.py` changes in the same pass.
 - **Trust rule:** `accept`/`reject` refuse when `by` starts with `agent:`. Accepting a decision whose `supersedes` is
