@@ -21,7 +21,7 @@ We use it for two things:
 - Auth: `Authorization: Bearer $HARNESS_ROUTER_KEY` (workspace key, prefix `sk-hr-`, lives in `.env`, **never commit**)
 - Send `Idempotency-Key: <uuid4>` on every task-creating POST. Reuse it only when retrying the same request.
 - Error envelope: `{"error": {"type", "code", "message", "param", "detail"}}`. **Match on `code`.**
-  Codes: `invalid_input`(400), `invalid_credential`(401), `payment_required`(402), **`no_key`(402, verified live: the workspace has no model
+  Codes: `invalid_input`(400), `invalid_credential`(401), `payment_required`(402), **`no_credit`(402, verified live: "Your balance is used up", blocks memory writes/recall once the trial credit is spent)**, **`no_key`(402, verified live: the workspace has no model
   provider key; the free trial covers agent work and memory, but model usage needs BYOK in the console)**, `insufficient_scope`(403),
   `not_found`(404), `conflict`(409), `session_busy`(409), `file_too_large`(413), `invalid_request`(422),
   `rate_limited`/`too_many_streams`(429), `internal_error|upstream_error|unavailable|timeout`(5xx).
@@ -127,3 +127,14 @@ Providers (live): `reme` (types `episode`,`note`; entities *stated*; text+query 
 
 Agent work is about $0.02 per active minute plus model cost at provider price, and memory operations cost about $0.0019 each. The free plan allows **2 concurrent
 tasks**. Keep harness budgets small and avoid running harnesses in loops.
+
+## Measured latency (live, 2026-11-18, from a laptop)
+
+| Call | Median |
+|---|---|
+| `POST /v1/memories` (create, reme) | ~1.8 s |
+| `GET /v1/memories/{id}/records` | ~0.4 s |
+| `POST .../records`, `POST .../recall` | ~0.26–0.36 s (402 responses, so real calls are likely slower) |
+| `POST /{harness}/v1/responses` | not measured yet (402 `no_key`), see T-39 |
+
+Never call HarnessRouter synchronously from a hook hot path. Use local caches plus background sync.

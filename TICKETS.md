@@ -128,11 +128,15 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 
 ---
 
-### T-39 · HarnessRouter: add a model key (BYOK) + live smoke run of every harness
+### T-39 · HarnessRouter: add credit + a model key (BYOK) + live smoke run of every harness
 - **Status:** OPEN
 - **Track:** A (workspace owner) · **Size:** S · **Depends on:** — · **Blocks every live harness run**
 - Found in integration testing: every `run` returns **`402 no_key`**. The free trial covers agent work and memory, but model
   usage needs our own provider key. The workspace owner adds an Anthropic key in the HarnessRouter console → *Bring Your Own Key*.
+- **Update (memory probe, 2026-11-18): the trial balance is used up.** Memory record writes and recall now return
+  **`402 no_credit`** ("Your balance is used up"). Creating, listing and deleting memories still work. So **T-09 (memory store) and every
+  shared-brain feature are blocked too**, not just harness runs. Fix: top up (minimum $10) or pick the Developer plan, then add the BYOK key.
+  Without this, the demo runs on SqliteStore only.
 - Then add `scripts/smoke_harnesses.py`, which runs each core harness once on a tiny fixture with `max_cost_usd=0.3` and
   prints latency, cost, and whether the output parsed. Record the numbers in `docs/harnessrouter-api.md`.
 - **Done when:** all 4 harnesses return valid JSON live, and the latency/cost table is in the docs.
@@ -409,6 +413,11 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Track:** A · **Size:** S · **Depends on:** T-08, T-04, T-09
 - **Files:** `hive/store/sqlite.py`, `hive/store/memory.py`
 - **SqliteStore half already ships in PR #12 (T-08)**, so this ticket is the HarnessMemoryStore half only (do it with or after T-09).
+- **Measured latency (live, 2026-11-18):** create memory ≈ 1.8 s, list records ≈ 0.4 s, write/recall ≈ 0.26–0.36 s per call (these were
+  rejected with 402, so real successful calls may be slower). That is **too slow for the 300 ms collision check to read synchronously**, and
+  one write per heartbeat across 3 agents is a lot of $0.0019 memory ops. Design: hooks read and write only a **local intents cache**,
+  and a background sync pushes heartbeats at most every 60 s. When the shared API server (T-34) is up, prefer it as the intents
+  relay (cheap, sub-100 ms on a LAN), and treat memory as the durable fallback.
 - `put_intent` upserts by `(member, branch)`. In the memory store, use an `intents` child memory with one record per member+branch
   that is PATCHed, not appended (keep memory ops low). `list_intents(active_within_minutes)` filters by heartbeat.
 - **Done when:** the contract test suite covers intents for both stores.
