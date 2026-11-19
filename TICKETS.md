@@ -313,6 +313,18 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 > **(3) ask a teammate's agent instead of Slack** (T-53). Plus **(4) context that knows when it's stale** (T-54).
 > See `docs/PRODUCT.md` → Positioning.
 
+### T-62 · Hook hot path: < 100 ms per edit, < 400 ms per session start
+- **Status:** OPEN
+- **Track:** B · **Size:** S · **Depends on:** T-12 (PR #19) · **Blocks T-50/T-51 meeting their latency targets**
+- Measured on the CLI (PR #19): `brief --hook` takes **841 ms**, of which **631 ms is `gh api user`** (a network call for identity on every
+  hook, cached only for the life of one process) and **263 ms is importing `hive.cli`** (typer + pydantic + decisions). T-50/T-51 add a hook on **every Edit, before and
+  after**, so at the current cost every agent edit gets about 1.8 s slower.
+- Fix: (1) cache the identity on disk at `~/.cache/hive/identity.json` (login + source + fetched_at, refreshed after 24 h or by `hive whoami --refresh`),
+  with `HIVE_MEMBER` still overriding. (2) A dedicated lightweight entry point `python -m hive.hook <event>` that imports only stdlib +
+  the needed module (no typer, lazy pydantic). Pre/PostToolUse read only the local intents cache file. (3) A perf test in CI:
+  the median of 5 runs of each hook event is below budget with the network disabled.
+- **Done when:** SessionStart < 400 ms and Pre/PostToolUse < 100 ms locally, enforced by the test.
+
 ### T-60 · Make "only humans accept" real, not self-declared
 - **Status:** OPEN
 - **Track:** B (CLI/hooks) + C (API/dashboard) · **Size:** M · **Depends on:** T-12, T-16, T-14
@@ -322,6 +334,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
      never in the repo or `.env`). The dashboard asks for it once and stores it in an httpOnly cookie. `by` comes from the token, not the body.
   2. **CLI:** `hive accept/reject` refuse unless stdin is a TTY and the human types the decision's short id back. Agent Bash
      tools aren't interactive.
+     *(PR #19 already refuses non-TTY accepts by treating them as `agent:<you>`, verified hands-on. What's left is the typed-id confirmation.)*
   3. **`hive install`** adds Claude Code permission **deny** rules: `Bash(hive accept:*)`, `Bash(hive reject:*)`,
      `Read(~/.config/hive/**)`, and `Bash(curl:*accept*)`.
   4. The docs say plainly that this is a guardrail against agents, not authentication against malicious humans (that's a non-goal).
