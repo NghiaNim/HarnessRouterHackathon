@@ -57,7 +57,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   (`HIVE_LIVE=1`) that lists bases.
 
 ### T-03 · Harness provisioning + prompts
-- **Status:** OPEN
+- **Status:** CLAIMED @NghiaNim 2026-11-18
 - **Track:** A · **Size:** M · **Depends on:** T-02
 - **Files:** `hive/hr/harnesses.py`, `prompts/{distiller,guard,arbiter,oracle}.md`, `harnessrouter.json`
 - `ensure_harnesses()` creates or updates the harnesses (distiller, guard, arbiter, oracle; cartographer only if T-21 is picked up) **by name** (idempotent) with the bases/models/budgets
