@@ -17,15 +17,15 @@
     <a class="brand" href="/">Hive</a>
     <nav aria-label="Sections">
       {% for key, label, path in nav %}
-      <a href="{{ path }}" {% if active == key %}aria-current="page"{% endif %}>{{ label }}</a>
+      <a href="{{ path }}" {% if active == key %}aria-current="page"{% endif %}{% if key in soon %} class="soon" title="Not built yet"{% endif %}>{{ label }}{% if key in soon %} <span class="pill">soon</span>{% endif %}</a>
       {% endfor %}
     </nav>
     <label class="me">
-      <span>You are</span>
+      <span>Your name</span>
       {# Pages send this as `by` on any action that needs a human: add hx-include="#me" to the element. #}
       <input id="me" name="by" placeholder="GitHub handle" autocomplete="off" spellcheck="false"
-             title="Your GitHub handle. Only humans can accept or reject decisions.">
-      <span class="me-hint">humans only</span>
+             title="Your GitHub handle. Needed to approve or reject team rules, which only humans can do.">
+      <span class="me-hint">needed to approve rules</span>
     </label>
   </header>
   <main>

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Hive{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>Hive keeps everyone's coding agents on the same page.</h1>
+  <p class="lede">
+    Each teammate runs their own AI coding agent (Claude Code, Codex, …). Hive gives all of them one shared memory:
+    <strong>the rules your team agreed on</strong> and <strong>what each agent already figured out</strong>.
+    Nobody re-explains things in Slack, and no agent re-reads the whole codebase to rediscover them.
+  </p>
+  {% if empty %}
+  <div class="callout">
+    <p><strong>Nothing here yet.</strong> Hive fills up as your team works. Load a small example to see how it fits together.</p>
+    <button class="primary" hx-post="/ui/example-data">Load example data</button>
+  </div>
+  {% endif %}
+</section>
+
+<h2 class="section-title">How it works</h2>
+<ol class="steps">
+  <li class="step">
+    <span class="step-n">1</span>
+    <h3>You correct your agent</h3>
+    <p>“No, use httpx, not requests.” When the session ends, Hive turns what you said into a
+      <em>proposed</em> team rule, quoting you as evidence.</p>
+    <a class="stat" href="/decisions"><b>{{ waiting | length }}</b> waiting for a human →</a>
+  </li>
+  <li class="step">
+    <span class="step-n">2</span>
+    <h3>A human approves it</h3>
+    <p>Agents can only <em>propose</em>. A person clicks <strong>Accept</strong> on Team rules, and the rule
+      becomes binding for every agent.</p>
+    <a class="stat" href="/decisions"><b>{{ active_rules | length }}</b> active rule{{ "" if active_rules | length == 1 else "s" }} →</a>
+  </li>
+  <li class="step">
+    <span class="step-n">3</span>
+    <h3>Every agent starts informed</h3>
+    <p>When anyone starts a session, Hive gives their agent a short <em>briefing</em>: the rules for the files it
+      will touch, plus what teammates' agents learned. <a href="#briefing">See one below.</a></p>
+    <span class="stat"><b>{{ note_count }}</b> session note{{ "" if note_count == 1 else "s" }}{% if people %} from {{ people | length }} teammate{{ "" if people | length == 1 else "s" }}{% endif %}</span>
+  </li>
+  <li class="step step-soon">
+    <span class="step-n">4</span>
+    <h3>Mistakes get caught <span class="pill">soon</span></h3>
+    <p>Hive flags edits that break a rule, and warns when two agents are changing the same file at the same time.</p>
+  </li>
+</ol>
+
+<p class="where">
+  <strong>Where does Hive run?</strong> In your terminal, Claude Code hooks call Hive automatically when a session
+  starts and ends, so there's nothing to copy-paste. This dashboard is where <strong>humans</strong> approve rules and see what the
+  agents know.
+</p>
+
+<section id="briefing" class="briefing-box">
+  <h2>See what an agent is told</h2>
+  <p class="muted">This is the exact text Hive adds to an agent's context when a session starts. Change the file to see
+    how only the relevant rules come along.</p>
+  <form class="briefing-form" hx-get="/ui/briefing" hx-target="#briefing-out" hx-trigger="load, submit, change">
+    <label>Teammate <input name="member" value="new-teammate" autocomplete="off"></label>
+    <label>Is about to edit <input name="path" value="{{ sample_path }}" autocomplete="off" size="28"></label>
+    <button type="submit">Show briefing</button>
+  </form>
+  <div id="briefing-out" aria-live="polite"></div>
+</section>
+
+<div class="two-col">
+  <section>
+    <h2>Active rules</h2>
+    {% for d in active_rules[:4] %}
+    <article class="mini">
+      <strong>{{ d.title }}</strong>
+      <p>{{ d.statement }}</p>
+      <p class="chips">{% for g in d.scope %}<code class="chip">{{ g }}</code>{% endfor %}
+        <span class="muted">approved by @{{ d.decided_by }}</span></p>
+    </article>
+    {% else %}
+    {% with title="No rules yet", text="Rules appear here once a human accepts one on Team rules." %}{% include "_empty.html" %}{% endwith %}
+    {% endfor %}
+  </section>
+  <section>
+    <h2>Latest session notes</h2>
+    {% for h in notes %}
+    <article class="mini">
+      <strong>@{{ h.member }}</strong> <span class="muted">on {{ h.branch }}</span>
+      <p>{{ h.summary }}</p>
+      {% for g in h.gotchas[:1] %}<p class="gotcha">⚠ {{ g }}</p>{% endfor %}
+    </article>
+    {% else %}
+    {% with title="No session notes yet", text="When a teammate's agent session ends, a short summary of what it learned lands here." %}{% include "_empty.html" %}{% endwith %}
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

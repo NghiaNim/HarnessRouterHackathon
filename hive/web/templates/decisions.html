@@ -1,23 +1,25 @@
 {% extends "base.html" %}
-{% block title %}Decisions · Hive{% endblock %}
+{% block title %}Team rules · Hive{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/decisions.css">{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Decisions</h1>
-    <p class="lede">Agents propose. Only a human can accept or reject.</p>
+    <h1>Team rules</h1>
+    <p class="lede">Rules every agent on the team must follow. Agents can only <em>propose</em> a rule (usually from
+      something you told your agent). It binds only once a human clicks <strong>Accept</strong>. Each rule applies to the files
+      matching its scope, so agents only get rules relevant to what they're editing.</p>
   </div>
   <details class="new-decision">
-    <summary>Add a decision</summary>
+    <summary>Add a rule</summary>
     <form hx-post="/ui/decisions" hx-target="#board" hx-swap="outerHTML" hx-include="#me"
           hx-on::after-request="if (event.detail.successful) this.reset()">
       <label>Title <input name="title" required maxlength="300" placeholder="HTTP client is httpx"></label>
       <label>Rule <textarea name="statement" required rows="2"
                             placeholder="Use httpx with a timeout; never requests."></textarea></label>
       <label>Why <textarea name="rationale" rows="2"></textarea></label>
-      <label>Scope <input name="scope" placeholder="hive/hr/**, tests/** (blank = whole repo)"></label>
+      <label>Applies to files <input name="scope" placeholder="hive/hr/**, tests/** (blank = whole repo)"></label>
       <button type="submit" class="primary">Propose</button>
-      <p class="hint">It lands in Proposed under your handle. Accept it there to make it binding.</p>
+      <p class="hint">It lands in "Waiting for a human". Click Accept there to make it binding.</p>
     </form>
   </details>
 </div>
