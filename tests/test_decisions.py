@@ -160,3 +160,23 @@ def test_in_scope_filters_accepted_by_paths(svc):
     assert ids(svc.in_scope([".\\hive\\web\\x.html"])) == {repo_wide.id, web.id}  # Windows-style path
     assert ids(svc.in_scope(["hive/hr/a.py", "hive/web/b.html"])) == {repo_wide.id, hr.id, web.id}
     assert ids(svc.in_scope(["README.md"])) == {repo_wide.id}
+
+
+# --- module-level API (matches the adapter in hive/api/app.py, PR #15) ---------------------------
+
+
+def test_module_functions_with_store_kwarg():
+    from hive.core import decisions
+
+    store = SqliteStore(":memory:")
+    fields = dict(  # exactly what the API's DecisionIn.model_dump() sends
+        title="HTTP client is httpx", statement="Use httpx.", proposed_by="agent:bob", rationale="",
+        scope=["hive/**"], supersedes=None, tags=[], source=None,
+    )
+    d = decisions.propose(**fields, store=store)
+    assert decisions.accept(d.id, "alice", store=store).status is DecisionStatus.ACCEPTED
+    assert [x.id for x in decisions.in_scope(["hive/x.py"], store=store)] == [d.id]
+    p = decisions.propose(statement="x", proposed_by="a", store=store)
+    assert decisions.reject(p.id, "alice", "no", store=store).status is DecisionStatus.REJECTED
+    with pytest.raises(AgentCannotDecide):
+        decisions.accept(p.id, "agent:bob", store=store)

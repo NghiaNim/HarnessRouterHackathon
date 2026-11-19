@@ -163,3 +163,23 @@ class DecisionService:
     def pending(self) -> list[Decision]:
         """Proposals awaiting a human, newest first."""
         return self.store.list_decisions(status=DecisionStatus.PROPOSED)
+
+
+# --- module-level convenience API ------------------------------------------------------------------
+# Thin wrappers taking `store=` (same convention as `compose_brief`), used by the API server's adapter.
+
+
+def propose(statement: str, *, store: ContextStore, proposed_by: str, **fields) -> Decision:
+    return DecisionService(store).propose(statement, proposed_by=proposed_by, **fields)
+
+
+def accept(decision_id: str, by: str, *, store: ContextStore) -> Decision:
+    return DecisionService(store).accept(decision_id, by)
+
+
+def reject(decision_id: str, by: str, reason: str = "", *, store: ContextStore) -> Decision:
+    return DecisionService(store).reject(decision_id, by, reason)
+
+
+def in_scope(paths: Iterable[str] | None = None, *, store: ContextStore) -> list[Decision]:
+    return DecisionService(store).in_scope(paths)
