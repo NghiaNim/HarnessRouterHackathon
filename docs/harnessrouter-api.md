@@ -25,6 +25,8 @@ We use it for two things:
   `not_found`(404), `conflict`(409), `session_busy`(409), `file_too_large`(413), `invalid_request`(422),
   `rate_limited`/`too_many_streams`(429), `internal_error|upstream_error|unavailable|timeout`(5xx).
   A 502 `store_write_failed` may mean the work ran, so recover the session and **don't resubmit**.
+  Verified ✅ (T-01): an exhausted workspace balance returns **`402 no_credit`** ("Your balance is used up") on memory
+  writes/recalls, while `POST /v1/memories` (create) and `GET .../records` still succeed.
 
 ## Discovery (verified ✅)
 
