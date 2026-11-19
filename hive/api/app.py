@@ -22,10 +22,16 @@ import re
 import threading
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from types import ModuleType
 from typing import Annotated, Any, Protocol
+from urllib.parse import parse_qs
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from hive.models import Brief, Decision, DecisionStatus, Handoff, ItemKind, ModuleNote, RecallHit
@@ -33,6 +39,28 @@ from hive.store.base import ContextStore, NotFound
 
 # An agent actor: "agent:bob", tolerant of case, padding and a full-width colon.
 _AGENT_ACTOR = re.compile(r"\s*agent\s*[:\uff1a]", re.IGNORECASE)
+
+WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+templates = Jinja2Templates(directory=WEB_DIR / "templates")
+
+# Dashboard nav, in order: (key, label, path). base.html renders it; each page marks its own key active.
+NAV = [
+    ("radar", "Radar", "/radar"),
+    ("decisions", "Decisions", "/decisions"),
+    ("timeline", "Timeline", "/timeline"),
+    ("ask", "Ask", "/ask"),
+    ("impact", "Impact", "/impact"),
+]
+templates.env.globals["nav"] = NAV
+
+# Sections that are still a "coming soon" page: key -> what will be there. The ticket that builds a section
+# removes its entry here and adds its own route and template (which extends base.html).
+PLACEHOLDERS = {
+    "radar": "Who is working where, live, with collisions in red.",
+    "timeline": "What each teammate's agent learned, session by session.",
+    "ask": "Questions answered from a teammate's agent context, with citations.",
+    "impact": "Tokens saved, rules mined, violations caught, collisions warned.",
+}
 
 
 class DecisionService(Protocol):
@@ -115,6 +143,28 @@ class RejectIn(_Actor):
 def _require_human(by: str) -> None:
     if _AGENT_ACTOR.match(by):
         raise HTTPException(403, "Agents may propose decisions, but only humans accept or reject them.")
+
+
+async def _form(request: Request) -> dict[str, str]:
+    """Read a urlencoded form body (what HTMX posts) without needing python-multipart."""
+    raw = (await request.body()).decode("utf-8", "replace")
+    return {k: v[-1].strip() for k, v in parse_qs(raw, keep_blank_values=True).items()}
+
+
+def _board(store: ContextStore) -> dict[str, Any]:
+    """Template context for the decisions board (T-17)."""
+    decisions = store.list_decisions()
+    by_status = {status: [d for d in decisions if d.status is status] for status in DecisionStatus}
+    return {
+        "columns": [
+            ("Proposed", "proposed", by_status[DecisionStatus.PROPOSED]),
+            ("Accepted", "accepted", by_status[DecisionStatus.ACCEPTED]),
+            ("Superseded", "superseded", by_status[DecisionStatus.SUPERSEDED]),
+        ],
+        "rejected": by_status[DecisionStatus.REJECTED],
+        "titles": {d.id: d.title for d in decisions},
+        "replaced_by": {d.supersedes: d for d in by_status[DecisionStatus.ACCEPTED] if d.supersedes},
+    }
 
 
 def create_app(
@@ -227,6 +277,99 @@ def create_app(
         return composer(
             member, branch, paths or [], ticket=ticket, budget_tokens=budget_tokens, store=get_store()
         )
+
+    # --- dashboard shell (T-27) ---------------------------------------------
+    app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
+
+    def placeholder_page(key: str) -> Callable[[Request], HTMLResponse]:
+        label = next(label for nav_key, label, _ in NAV if nav_key == key)
+
+        def page(request: Request) -> HTMLResponse:
+            context = {"active": key, "label": label, "blurb": PLACEHOLDERS[key]}
+            return templates.TemplateResponse(request, "placeholder.html", context)
+
+        return page
+
+    for key, _, path in NAV:
+        if key in PLACEHOLDERS:
+            app.add_api_route(
+                path, placeholder_page(key), response_class=HTMLResponse, include_in_schema=False
+            )
+
+    # The dashboard opens on the first nav item.
+    home_key = NAV[0][0]
+    if home_key in PLACEHOLDERS:
+        app.add_api_route(
+            "/", placeholder_page(home_key), response_class=HTMLResponse, include_in_schema=False
+        )
+
+    # --- dashboard: decisions board (T-17) ----------------------------------
+    def render_board(request: Request, error: str | None = None, status_code: int = 200) -> HTMLResponse:
+        context = {**_board(get_store()), "error": error}
+        return templates.TemplateResponse(request, "_board.html", context, status_code=status_code)
+
+    async def board_action(request: Request, action: Callable[[], Any]) -> HTMLResponse:
+        """Run a board action off the event loop, then re-render the board (with the error, if it failed)."""
+        try:
+            await run_in_threadpool(action)
+        except HTTPException as e:
+            return await run_in_threadpool(render_board, request, str(e.detail), e.status_code)
+        return await run_in_threadpool(render_board, request)
+
+    @app.get("/decisions", response_class=HTMLResponse, include_in_schema=False)
+    def decisions_page(request: Request) -> HTMLResponse:
+        context = {**_board(get_store()), "error": None, "active": "decisions"}
+        return templates.TemplateResponse(request, "decisions.html", context)
+
+    @app.get("/ui/decisions/board", response_class=HTMLResponse, include_in_schema=False)
+    def decisions_board(request: Request) -> HTMLResponse:
+        return render_board(request)
+
+    @app.post("/ui/decisions", response_class=HTMLResponse, include_in_schema=False)
+    async def ui_propose(request: Request) -> HTMLResponse:
+        form = await _form(request)
+
+        def action() -> None:
+            by = form.get("by", "")
+            if not by:
+                raise HTTPException(422, "Enter your GitHub handle (top right) first.")
+            if not form.get("title") or not form.get("statement"):
+                raise HTTPException(422, "A decision needs a title and a statement.")
+            _require_human(by)  # this form is the human path; agents propose through the API or MCP
+            scope = [s.strip() for s in form.get("scope", "").split(",") if s.strip()] or ["**"]
+            service = get_decisions()
+            lifecycle(
+                lambda: service.propose(
+                    title=form["title"][:300],
+                    statement=form["statement"],
+                    rationale=form.get("rationale", ""),
+                    scope=scope,
+                    proposed_by=by,
+                    source="dashboard",
+                )
+            )
+
+        return await board_action(request, action)
+
+    @app.post("/ui/decisions/{decision_id}/{verb}", response_class=HTMLResponse, include_in_schema=False)
+    async def ui_decide(request: Request, decision_id: str, verb: str) -> HTMLResponse:
+        if verb not in ("accept", "reject"):
+            raise HTTPException(404)
+        form = await _form(request)
+
+        def action() -> None:
+            by = form.get("by", "")
+            if not by:
+                raise HTTPException(422, "Enter your GitHub handle (top right) before deciding.")
+            _require_human(by)
+            service = get_decisions()
+            if verb == "accept":
+                lifecycle(lambda: service.accept(decision_id, by))
+            else:
+                reason = request.headers.get("HX-Prompt", "") or form.get("reason", "")
+                lifecycle(lambda: service.reject(decision_id, by, reason))
+
+        return await board_action(request, action)
 
     return app
 

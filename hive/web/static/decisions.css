@@ -1,0 +1,71 @@
+/* Decisions board (T-17). Tokens and shared pieces come from app.css. */
+
+.page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
+.lede { margin: 0 0 20px; color: var(--muted); }
+
+.new-decision {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+}
+.new-decision summary { cursor: pointer; font-weight: 600; }
+.new-decision form { display: grid; gap: 10px; width: min(520px, 80vw); margin-top: 12px; }
+.new-decision label { display: grid; gap: 4px; font-size: 15px; color: var(--muted); }
+.hint { margin: 0; font-size: 14px; color: var(--muted); }
+
+button.primary, button.accept { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+button.reject { color: var(--danger); }
+
+.columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: start; }
+@media (max-width: 900px) { .columns { grid-template-columns: 1fr; } }
+
+.column h2 {
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-bottom: 4px solid var(--line);
+}
+.column-proposed h2 { border-color: var(--accent); }
+.column-accepted h2 { border-color: var(--ok); }
+.column-superseded h2 { border-color: var(--muted); }
+.count { color: var(--muted); font-weight: 400; margin-left: 4px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  overflow-wrap: anywhere;
+}
+.card:target { outline: 3px solid var(--accent); }
+.column-superseded .card { opacity: 0.7; }
+.card h3 { margin: 0 0 6px; font-size: 20px; line-height: 1.3; }
+.card p { margin: 6px 0; }
+.rationale, .link { font-size: 15px; color: var(--muted); white-space: pre-line; }
+.evidence {
+  margin: 10px 0;
+  padding: 4px 14px;
+  border-left: 4px solid var(--accent);
+  font-style: italic;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font: 13px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+}
+.meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.badge { font-size: 13px; padding: 2px 9px; border-radius: 4px; background: var(--bg); color: var(--muted); }
+.badge-agent { background: var(--agent-bg); color: var(--agent-ink); font-weight: 700; }
+.badge-human { background: var(--human-bg); color: var(--human-ink); }
+.actions { display: flex; gap: 8px; margin-top: 12px; }
+.none { color: var(--muted); font-size: 15px; }
+
+.rejected { margin-top: 20px; color: var(--muted); font-size: 15px; }
+.rejected summary { cursor: pointer; }
