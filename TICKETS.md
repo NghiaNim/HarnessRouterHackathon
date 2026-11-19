@@ -463,7 +463,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - A search box (calls `/api/recall`) with typed result cards, and a collapsible tree of module notes.
 
 ### T-26 · Cost guardrail for HarnessRouter spend
-- **Status:** CLAIMED @NghiaNim 2026-11-18
+- **Status:** IN REVIEW @NghiaNim PR #21
 - **Track:** A · **Size:** S · **Depends on:** T-02
 - **Files:** `hive/hr/client.py` (hook point), `hive/hr/budget.py`
 - Track the cost of each `run()` (from the response usage/cost if present, otherwise the harness `max_cost_usd` as an upper bound) in
