@@ -189,7 +189,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   correct evidence quotes (fake client in the test, one live run recorded in the PR).
 
 ### T-16 · API server (REST)
-- **Status:** OPEN
+- **Status:** CLAIMED @itsjoshzhang 2026-11-18
 - **Track:** C · **Size:** M · **Depends on:** T-04 (Sqlite), T-10
 - **Files:** `hive/api/app.py`, `tests/test_api.py`; run with `uv run uvicorn hive.api.app:app --reload`
 - `GET/POST /api/decisions`, `POST /api/decisions/{id}/accept|reject`, `GET /api/handoffs`,
