@@ -129,3 +129,15 @@ HIVE_PROJECT=harness-router-hackathon
 HIVE_STORE=memory                   # memory | sqlite
 HIVE_API_URL=http://localhost:8000  # dashboard/server
 ```
+
+## Coding conventions (learned from reviews, so follow them)
+
+- **Settings come only from `hive.config.get_settings()`.** Never read `os.environ` or `.env` directly in other modules.
+  `get_settings()` merges `.env` with the environment. Get the HarnessRouter key **lazily** with `settings.require_key()`,
+  which raises `MissingKeyError` with setup instructions only when a HarnessRouter call is actually attempted. (From PR #10's review.)
+- **Build clients from settings:** `HRClient.from_env(settings=None)` → `get_settings()`. Don't construct one from raw env vars.
+- **Hot paths fail fast.** Anything reachable from a Claude Code hook (brief, intent touch/check, handoff enqueue) caps every
+  wait: cap `Retry-After` (≤ 30s in general, and **no retries at all** on hook paths), set a hard timeout, and fail open (T-19).
+- **One exception type per concern:** `hive.config.MissingKeyError`/`ConfigError` for setup and `hive.hr.client.HRError` for API
+  errors. Callers (CLI, MCP, API) turn these into friendly messages. Never print a stack trace to the user.
+- **Rebase on `main` before requesting review** so CI (ruff + pytest) runs against the current lint config.
