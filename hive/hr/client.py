@@ -77,6 +77,15 @@ def _pick(body: Any, key: str) -> Any:
     return body[key] if isinstance(body, dict) and key in body else body
 
 
+def _rejected_before_work(e: Exception) -> bool:
+    return (
+        isinstance(e, HRError)
+        and 400 <= e.status < 500
+        and e.status not in (408, 429)
+        and e.code not in _NO_RETRY_CODES
+    )
+
+
 def _response_text(resp: dict) -> str:
     if isinstance(resp.get("output_text"), str):
         return resp["output_text"]
@@ -105,7 +114,10 @@ class HRClient:
         max_retry_after: float = 30.0,
         sleep: Callable[[float], None] = time.sleep,
         transport: httpx.BaseTransport | None = None,
+        ledger: Any = None,
     ) -> None:
+        """`ledger`: a `hive.hr.budget.SpendLedger` that guards and records every `run()` (T-26).
+        `from_env()` attaches the default one; a bare constructor (tests) does not."""
         if not api_key:
             raise ValueError("HarnessRouter key missing: set HARNESS_ROUTER_KEY in .env")
         self.base_url = base_url.rstrip("/")
@@ -114,6 +126,7 @@ class HRClient:
         self.poll_interval = poll_interval
         self.max_retry_after = max_retry_after  # never let a server freeze a hook/CLI for long (T-19)
         self._sleep = sleep
+        self.ledger = ledger
         self._http = httpx.Client(
             base_url=self.base_url,
             headers={"Authorization": f"Bearer {api_key}"},
@@ -131,6 +144,10 @@ class HRClient:
         def get(name: str) -> str:
             return (os.environ.get(name) or file_vals.get(name) or "").strip()
 
+        if "ledger" not in kw:
+            from hive.hr.budget import SpendLedger
+
+            kw["ledger"] = SpendLedger.from_env()
         return cls(get("HARNESS_ROUTER_KEY"), get("HARNESS_ROUTER_URL") or DEFAULT_BASE_URL, **kw)
 
     def close(self) -> None:
@@ -242,7 +259,34 @@ class HRClient:
             self._sleep(self.poll_interval)
 
     def run(self, harness_id: str, input: Any, *, stream: bool = False, **opts: Any) -> RunResult:
-        """Run a task on a harness. Extra kwargs go into the request body (max_cost_usd, metadata, ...)."""
+        """Run a task on a harness. Extra kwargs go into the request body (max_cost_usd, metadata, ...).
+
+        With a ledger, raises `BudgetExceeded` (an HRError) before sending anything if today's spend plus this
+        run's `max_cost_usd` would pass the daily budget, and records the run's cost afterwards.
+        """
+        max_cost = opts.get("max_cost_usd")
+        if self.ledger is not None:
+            self.ledger.check(max_cost)
+        try:
+            result = self._run(harness_id, input, stream=stream, **opts)
+        except Exception as e:
+            # The request may have gone out and the work may have run (5xx, timeout, dropped stream,
+            # store_write_failed): count an upper bound so retries can't spend without limit. A clean 4xx
+            # rejection (bad input, auth) means nothing ran.
+            if self.ledger is not None and not _rejected_before_work(e):
+                self.ledger.record_run(harness_id, None, max_cost_usd=max_cost, status="error")
+            raise
+        if self.ledger is not None:
+            self.ledger.record_run(
+                harness_id,
+                result.raw,
+                max_cost_usd=max_cost,
+                response_id=result.response_id,
+                status=result.status,
+            )
+        return result
+
+    def _run(self, harness_id: str, input: Any, *, stream: bool, **opts: Any) -> RunResult:
         body = {"input": input, **opts}
         path = f"/{harness_id}/v1/responses"
         if not stream:
