@@ -510,7 +510,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** the demo scenario (`import requests` vs the httpx decision) is flagged with the decision id and file.
 
 ### T-22 · Arbiter: duplicate & contradiction detection
-- **Status:** CLAIMED @NghiaNim 2026-11-18
+- **Status:** IN REVIEW @NghiaNim PR #25
 - **Track:** A · **Size:** M · **Depends on:** T-03, T-10
 - **Files:** `hive/agents/arbiter.py`
 - On `propose`, recall the top-5 similar decisions and run `hive-arbiter` to get an `ArbiterVerdict`. Store the verdict
