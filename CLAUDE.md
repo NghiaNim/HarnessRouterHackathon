@@ -70,7 +70,7 @@ The three Claudes do not share memory. `TICKETS.md` on `origin/main` is the sour
   straight to `main` from a temporary worktree (safe from any branch) and retries if someone else pushed first. If it
   says the ticket is not open, **someone else has it, so pick another.** Never work on a ticket claimed by someone else.
 - **Hold at most 2 claimed tickets.** If you stop working on one, run `python scripts/ticket.py release T-NN`.
-- **PR opened:** `python scripts/ticket.py review T-NN --pr <N>`. **Merged:** `python scripts/ticket.py done T-NN --pr <N>`.
+- **PR opened:** `python scripts/ticket.py review T-NN --pr <N>`. Run it **in the same step as** `gh pr create`. The board drifts otherwise. **Merged:** `python scripts/ticket.py done T-NN --pr <N>`.
 - **Never edit `Status:` lines by hand, and never touch `TICKETS.md` on a feature branch.** That causes merge conflicts.
 - **New work discovered mid-task?** Don't expand scope. Tell your human so the orchestrator can add a ticket.
 - **Touching shared files** (`pyproject.toml`, contracts, `hive/api/app.py` routes)? Keep the change minimal and
@@ -227,6 +227,9 @@ behind `HIVE_LIVE=1`.
 2. `git fetch origin` — see what's new.
 3. `gh pr list --search "review-requested:@me is:open"` — review teammates first.
 4. `gh pr list --author @me` — handle feedback on your own PRs.
+   **Merge anything of yours that is approved and green right away**: `gh pr list --author @me --search "review:approved"`,
+   then `gh pr merge <N> --squash --delete-branch` and `python scripts/ticket.py done T-NN --pr <N>`. Approved-but-unmerged PRs
+   are the #1 integration risk: on 2026-11-18, 7 approved PRs sat unmerged while new work stacked on top of them.
 5. Continue your claimed ticket, or claim a new one with `scripts/ticket.py` (§3).
 6. Branch → build → test → rebase → PR (`ticket.py review`) → review → author merges (`ticket.py done`).
 
