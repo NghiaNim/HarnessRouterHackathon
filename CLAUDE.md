@@ -201,6 +201,10 @@ gh pr review <N> --comment         -b "<non-blocking suggestions / questions>"
 gh pr merge <N> --squash --delete-branch
 ```
 
+- **Stacked PRs:** if another open PR uses your branch as its base, **retarget it to main first**
+  (`gh pr edit <child#> --base main`), *then* merge with `--delete-branch`. Otherwise GitHub auto-closes the child unmerged.
+  This happened to #16 on 2026-11-18.
+
 - After merging, everyone else should rebase active branches: `git fetch origin && git rebase origin/main`.
 
 ---
