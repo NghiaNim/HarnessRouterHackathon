@@ -204,7 +204,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** it is tested with FastAPI TestClient on SqliteStore.
 
 ### T-17 · Dashboard: decisions board (human-in-the-loop)
-- **Status:** OPEN
+- **Status:** CLAIMED @itsjoshzhang 2026-11-18
 - **Track:** C · **Size:** M · **Depends on:** T-16
 - **Files:** `hive/web/templates/*`, `hive/web/static/*`, routes in `hive/api/app.py`
 - Columns: Proposed / Accepted / Superseded. Accept and reject buttons (HTMX), and a "proposed by agent:x" badge,
