@@ -157,6 +157,17 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   rules only" (scope `**`).
 - **Done when:** a perf-fixture test asserts `token_estimate ≤ budget` for both cases, and at least 1 handoff is included when one exists.
 
+### T-67 · BUG: brief picks handoffs by time only, so relevant teammate knowledge is dropped
+- **Status:** OPEN
+- **Track:** A · **Size:** S · **Depends on:** T-59 (PR #23), T-08 · **Core value prop; top of M1 after T-59**
+- Repro (PR #23 branch): Bob wrote a handoff 2 h ago touching `hive/api/app.py` ("GOTCHA: accept must go through the DecisionService
+  wrappers or it 500s"). Carol wrote an unrelated handoff 5 min ago, and is now editing `hive/api/app.py`. **Carol's brief contains 0 handoffs.**
+  Cause: `since = my latest handoff`, so only teammates' handoffs newer than *my own last handoff* are considered, with no path relevance.
+- Fix: score candidate handoffs (teammates only, last 7 days, not stale per T-54 when it lands) by **path overlap** with my focus paths
+  (same file > same dir > same top-level package) plus a small recency bonus. Always include the top path-relevant ones, then fill the
+  rest with "new since my last session". Define "my last session" by my last **`BriefLog`** (T-08 contract), not my last handoff.
+- **Done when:** the Bob/Carol repro includes Bob's gotcha, and a test shows that an unrelated recent handoff ranks below an older same-file handoff.
+
 ### T-48 · BUG: scope globs need gitignore semantics
 - **Status:** OPEN
 - **Track:** any · **Size:** S · **Depends on:** — (behavior-only contract PR on `Decision.applies_to`; all active members review)
