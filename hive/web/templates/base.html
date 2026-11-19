@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Hive{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  {# Pinned and integrity-checked. HarnessRouter is never called from the browser: pages talk to this server only. #}
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"
+          integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+"
+          crossorigin="anonymous" defer></script>
+  <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"
+          integrity="sha384-fw+eTlCc7suMV/1w/7fr2/PmwElUIt5i82bi+qTiLXvjRXZ2/FkiTNA/w0MhXnGI"
+          crossorigin="anonymous" defer></script>
+  <script src="/static/app.js" defer></script>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Hive</a>
+    <nav aria-label="Sections">
+      {% for key, label, path in nav %}
+      <a href="{{ path }}" {% if active == key %}aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+    <label class="me">
+      <span>You are</span>
+      <input id="me" name="by" placeholder="GitHub handle" autocomplete="off" spellcheck="false">
+    </label>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

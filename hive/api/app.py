@@ -22,10 +22,14 @@ import re
 import threading
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from types import ModuleType
 from typing import Annotated, Any, Protocol
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from hive.models import Brief, Decision, DecisionStatus, Handoff, ItemKind, ModuleNote, RecallHit
@@ -33,6 +37,29 @@ from hive.store.base import ContextStore, NotFound
 
 # An agent actor: "agent:bob", tolerant of case, padding and a full-width colon.
 _AGENT_ACTOR = re.compile(r"\s*agent\s*[:\uff1a]", re.IGNORECASE)
+
+WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+templates = Jinja2Templates(directory=WEB_DIR / "templates")
+
+# Dashboard nav, in order: (key, label, path). base.html renders it; each page marks its own key active.
+NAV = [
+    ("radar", "Radar", "/radar"),
+    ("decisions", "Decisions", "/decisions"),
+    ("timeline", "Timeline", "/timeline"),
+    ("ask", "Ask", "/ask"),
+    ("impact", "Impact", "/impact"),
+]
+templates.env.globals["nav"] = NAV
+
+# Sections that are still a "coming soon" page: key -> what will be there. The ticket that builds a section
+# removes its entry here and adds its own route and template (which extends base.html).
+PLACEHOLDERS = {
+    "radar": "Who is working where, live, with collisions in red.",
+    "decisions": "Rules agents proposed, waiting for a human to accept or reject.",
+    "timeline": "What each teammate's agent learned, session by session.",
+    "ask": "Questions answered from a teammate's agent context, with citations.",
+    "impact": "Tokens saved, rules mined, violations caught, collisions warned.",
+}
 
 
 class DecisionService(Protocol):
@@ -226,6 +253,31 @@ def create_app(
         composer = get_brief_composer()
         return composer(
             member, branch, paths or [], ticket=ticket, budget_tokens=budget_tokens, store=get_store()
+        )
+
+    # --- dashboard shell (T-27) ---------------------------------------------
+    app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
+
+    def placeholder_page(key: str) -> Callable[[Request], HTMLResponse]:
+        label = next(label for nav_key, label, _ in NAV if nav_key == key)
+
+        def page(request: Request) -> HTMLResponse:
+            context = {"active": key, "label": label, "blurb": PLACEHOLDERS[key]}
+            return templates.TemplateResponse(request, "placeholder.html", context)
+
+        return page
+
+    for key, _, path in NAV:
+        if key in PLACEHOLDERS:
+            app.add_api_route(
+                path, placeholder_page(key), response_class=HTMLResponse, include_in_schema=False
+            )
+
+    # The dashboard opens on the first nav item.
+    home_key = NAV[0][0]
+    if home_key in PLACEHOLDERS:
+        app.add_api_route(
+            "/", placeholder_page(home_key), response_class=HTMLResponse, include_in_schema=False
         )
 
     return app
