@@ -79,6 +79,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Status:** OPEN
 - **Track:** A · **Size:** L · **Depends on:** T-01, T-02, T-04
 - **Files:** `hive/store/memory.py`, register it in `hive/store/__init__.py`, plus a param in `tests/test_store_contract.py`
+- **Redaction (T-28, PR #18):** pass every outbound string through `hive.core.redact.Redactor` (record title/content/attributes before `write_record`/`patch_record`) and assert it in a test.
 - Follow the mapping table in ARCHITECTURE.md. Store the model JSON in `attributes` so it round-trips exactly. Use the
   `decisions`/`handoffs`/`intents`/`codebase` children under the project root memory, with the provider chosen in T-01.
 - **Done when:** it passes the same contract suite with `HIVE_LIVE=1`, and `HIVE_STORE=memory` works end to end for `hive decisions`.
@@ -227,6 +228,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Status:** OPEN
 - **Track:** A · **Size:** M · **Depends on:** T-03, T-04
 - **Files:** `hive/agents/distiller.py`, `tests/test_distiller.py`
+- **Redaction (T-28, PR #18):** pass every outbound string through `hive.core.redact.Redactor` (transcript upload + harness input) and assert it in a test.
 - Read the Claude Code JSONL transcript and trim it (drop tool outputs over N chars and keep user/assistant text plus the edited file
   list), add `git diff --stat`, and run `hive-distiller` to get a `Handoff` plus `proposed_decisions[]`. Then save the handoff and
   call `decisions.propose()` with `proposed_by="agent:<member>"` for each proposed decision.
