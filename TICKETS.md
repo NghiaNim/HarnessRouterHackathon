@@ -302,7 +302,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** `/` renders the shell with nav, and each nav item shows a "coming soon" placeholder.
 
 ### T-17 · Dashboard: decisions board (human-in-the-loop)
-- **Status:** IN REVIEW @itsjoshzhang PR #20
+- **Status:** DONE @itsjoshzhang PR #20
 - **Track:** C · **Size:** M · **Depends on:** T-27, T-16
 - **Files:** `hive/web/templates/*`, `hive/web/static/*`, routes in `hive/api/app.py`
 - Columns: Proposed / Accepted / Superseded. Accept and reject buttons (HTMX), and a "proposed by agent:x" badge,
