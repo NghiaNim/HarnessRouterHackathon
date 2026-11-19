@@ -158,7 +158,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** a perf-fixture test asserts `token_estimate ≤ budget` for both cases, and at least 1 handoff is included when one exists.
 
 ### T-67 · BUG: brief picks handoffs by time only, so relevant teammate knowledge is dropped
-- **Status:** OPEN
+- **Status:** CLAIMED @NghiaNim 2026-11-18
 - **Track:** A · **Size:** S · **Depends on:** T-59 (PR #23), T-08 · **Core value prop; top of M1 after T-59**
 - Repro (PR #23 branch): Bob wrote a handoff 2 h ago touching `hive/api/app.py` ("GOTCHA: accept must go through the DecisionService
   wrappers or it 500s"). Carol wrote an unrelated handoff 5 min ago, and is now editing `hive/api/app.py`. **Carol's brief contains 0 handoffs.**
