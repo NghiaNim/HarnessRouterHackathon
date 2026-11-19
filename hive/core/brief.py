@@ -31,13 +31,23 @@ def _in_scope(decision: Decision, paths: list[str]) -> bool:
     return not paths or any(decision.applies_to(p) for p in paths)
 
 
+def _normalize(path: str) -> str:
+    """Hooks may hand us Windows separators or `./`-prefixed paths; scopes are POSIX globs."""
+    path = path.replace("\\", "/")
+    while path.startswith("./"):
+        path = path[2:]
+    return path
+
+
 def _note_touched(note: ModuleNote, paths: list[str]) -> bool:
     note_path = note.path.rstrip("/")
     for p in paths:
         if (
             p == note_path
             or p.startswith(note_path + "/")
-            or os.path.dirname(p) == os.path.dirname(note_path)
+            # sibling files share context, but only for FILE notes: a directory note `hive/hr` must not
+            # match everything in `hive/`
+            or (os.path.splitext(note_path)[1] and os.path.dirname(p) == os.path.dirname(note_path))
         ):
             return True
     return False
@@ -98,7 +108,7 @@ def compose_brief(
         from hive.store import get_store
 
         store = get_store()
-    paths = list(changed_paths)
+    paths = [_normalize(p) for p in changed_paths]
 
     accepted = [d for d in store.list_decisions(status=DecisionStatus.ACCEPTED) if _in_scope(d, paths)]
     pending = [d for d in store.list_decisions(status=DecisionStatus.PROPOSED) if _in_scope(d, paths)]

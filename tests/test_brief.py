@@ -179,3 +179,15 @@ def test_empty_store():
     brief = compose_brief("alice", "main", ["x.py"], store=SqliteStore(":memory:"))
     assert "No team context yet" in brief.markdown
     assert brief.decision_ids == brief.handoff_ids == brief.module_paths == []
+
+
+def test_directory_note_does_not_match_parent_siblings(store):
+    store.put_module_note(ModuleNote(path="hive/hr", summary="HR package.", commit_sha="abc"))
+    assert "hive/hr" not in compose_brief("x", "b", ["hive/models.py"], store=store).module_paths
+    assert "hive/hr" in compose_brief("x", "b", ["hive/hr/new.py"], store=store).module_paths
+
+
+def test_paths_are_normalized(store):
+    brief = compose_brief("bob", "b", ["./hive\\web\\app.js"], store=store)
+    assert "dkey000002" in brief.decision_ids
+    assert brief.module_paths == ["hive/web/app.js"]
