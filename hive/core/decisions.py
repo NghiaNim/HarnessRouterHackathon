@@ -35,6 +35,17 @@ def is_agent(actor: str) -> bool:
     return actor.strip().lower().startswith(AGENT_PREFIX)
 
 
+def _str_list(value: str | Iterable[str] | None) -> list[str]:
+    """A list of non-blank stripped strings. A bare `str` is one item, not a sequence of characters."""
+    if value is None:
+        return []
+    items = [value] if isinstance(value, str) else list(value)
+    for item in items:
+        if not isinstance(item, str):
+            raise DecisionError(f"expected strings, got {type(item).__name__}: {item!r}")
+    return [s.strip() for s in items if s.strip()]
+
+
 def _normalize_path(path: str) -> str:
     path = path.replace("\\", "/")
     while path.startswith("./"):
@@ -59,9 +70,14 @@ class DecisionService:
         scope: Iterable[str] | None = None,
         tags: Iterable[str] | None = None,
         source: str | None = None,
+        evidence: str | None = None,
         supersedes: str | None = None,
     ) -> Decision:
-        """Record a PROPOSED decision. Agents and humans may both propose."""
+        """Record a PROPOSED decision. Agents and humans may both propose.
+
+        `scope`/`tags` accept a list or a single string (a bare string is ONE glob/tag, never split into
+        characters: `"hive/**"` iterated would yield a `"*"` glob that matches every path).
+        """
         statement = statement.strip()
         if not statement:
             raise DecisionError("a decision needs a statement")
@@ -73,17 +89,22 @@ class DecisionService:
                 raise DecisionError(
                     f"can only supersede an accepted decision; {old.id} is {old.status.value}"
                 )
-        scope_list = [s.strip() for s in (scope or []) if s.strip()] or ["**"]
+        extra: dict = {}
+        if evidence is not None:
+            if "evidence" not in Decision.model_fields:  # added to the contract by T-08 (#12)
+                raise DecisionError("`evidence` needs the T-08 contract field Decision.evidence")
+            extra["evidence"] = evidence
         decision = Decision(
             title=(title or statement).strip()[:300],
             statement=statement,
             rationale=rationale.strip(),
-            scope=scope_list,
+            scope=_str_list(scope) or ["**"],
             proposed_by=proposed_by.strip(),
             created_at=self._clock(),
             supersedes=supersedes,
-            tags=list(tags or []),
+            tags=_str_list(tags),
             source=source,
+            **extra,
         )
         return self.store.put_decision(decision)
 
@@ -169,8 +190,14 @@ class DecisionService:
 # Thin wrappers taking `store=` (same convention as `compose_brief`), used by the API server's adapter.
 
 
-def propose(statement: str, *, store: ContextStore, proposed_by: str, **fields) -> Decision:
+def propose(*, statement: str, proposed_by: str, store: ContextStore, **fields) -> Decision:
     return DecisionService(store).propose(statement, proposed_by=proposed_by, **fields)
+
+
+def supersede(
+    old_id: str, new_statement: str, *, proposed_by: str, store: ContextStore, **fields
+) -> Decision:
+    return DecisionService(store).supersede(old_id, new_statement, proposed_by=proposed_by, **fields)
 
 
 def accept(decision_id: str, by: str, *, store: ContextStore) -> Decision:

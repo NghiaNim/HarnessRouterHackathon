@@ -180,3 +180,39 @@ def test_module_functions_with_store_kwarg():
     assert decisions.reject(p.id, "alice", "no", store=store).status is DecisionStatus.REJECTED
     with pytest.raises(AgentCannotDecide):
         decisions.accept(p.id, "agent:bob", store=store)
+
+
+def test_bare_string_scope_and_tags_are_one_item_not_characters(svc):
+    # Regression: iterating "hive/**" would store a "*" glob, making the rule apply to every path.
+    d = svc.propose("Use ruff", proposed_by="alice", scope="hive/**", tags="lint")
+    assert d.scope == ["hive/**"] and d.tags == ["lint"]
+    svc.accept(d.id, by="h")
+    assert svc.in_scope(["README.md"]) == []
+    with pytest.raises(DecisionError, match="expected strings"):
+        svc.propose("x", proposed_by="a", scope=[3])
+
+
+def test_evidence_is_stored_or_rejected_loudly(svc):
+    from hive.models import Decision
+
+    if "evidence" in Decision.model_fields:  # T-08 (#12) merged
+        d = svc.propose("x", proposed_by="agent:a", evidence="no, use httpx")
+        assert svc.store.get_decision(d.id).evidence == "no, use httpx"
+    else:  # never silently dropped
+        with pytest.raises(DecisionError, match="evidence"):
+            svc.propose("x", proposed_by="agent:a", evidence="no, use httpx")
+    assert svc.propose("y", proposed_by="a", evidence=None).statement == "y"
+
+
+def test_module_supersede_and_keyword_only_propose():
+    from hive.core import decisions
+
+    store = SqliteStore(":memory:")
+    old = decisions.propose(statement="Use httpx", proposed_by="a", scope="hive/**", store=store)
+    decisions.accept(old.id, "alice", store=store)
+    new = decisions.supersede(old.id, "Use httpx, timeout 10s", proposed_by="agent:b", store=store)
+    assert new.supersedes == old.id and new.scope == ["hive/**"]
+    decisions.accept(new.id, "alice", store=store)
+    assert store.get_decision(old.id).status is DecisionStatus.SUPERSEDED
+    with pytest.raises(TypeError):
+        decisions.propose("positional", proposed_by="a", store=store)  # keyword-only, per ticket
