@@ -145,7 +145,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** the state machine is fully unit-tested, including the agent-can't-accept rule.
 
 ### T-11 · Brief composer (the token saver)
-- **Status:** IN REVIEW @NghiaNim PR #13
+- **Status:** DONE @NghiaNim PR #13
 - **Track:** A · **Size:** M · **Depends on:** T-04 (Sqlite), T-05
 - **Files:** `hive/core/brief.py`, `tests/test_brief.py`
 - `compose_brief(member, branch, changed_paths, ticket=None, budget_tokens=2000) -> Brief`.
