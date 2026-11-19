@@ -6,16 +6,35 @@ without stepping on each other, and so every change to `main` is reviewed by som
 
 ---
 
+## 0. Start here (read before writing any code)
+
+We're building **Hive**, a shared brain for teams of coding agents, on top of **HarnessRouter**.
+
+1. `docs/PRODUCT.md`: what we're building and why (the core demo loop).
+2. `docs/ARCHITECTURE.md`: stack, package layout, **file ownership per track**, memory mapping.
+3. `docs/harnessrouter-api.md`: **verified** HarnessRouter API reference. Don't re-research the API. If you find
+   something new or wrong, fix this file in your PR.
+4. `TICKETS.md`: the ticket board. Work only on a ticket you've claimed (§3).
+
+**Contracts:** `hive/models.py` and `hive/store/base.py` are shared interfaces. Build against them. Changing
+them needs its own PR reviewed by both other members (additive optional fields are fine, renames/removals aren't).
+
+**Orchestrator:** `NghiaNim`'s Claude acts as product manager/orchestrator. It owns `TICKETS.md` content, the docs,
+and scope decisions. If a ticket is unclear or seems wrong, ask your human to raise it with the orchestrator rather
+than silently expanding scope.
+
+---
+
 ## 1. Team roster
 
-| Member | GitHub handle | Focus area (optional) |
-|--------|---------------|-----------------------|
-| A      | `NghiaNim`    | _TBD_                 |
-| B      | `<handle-B>`  | _TBD_                 |
-| C      | `<handle-C>`  | _TBD_                 |
+| Member | GitHub handle | Primary track |
+|--------|---------------|---------------|
+| A      | `NghiaNim`    | A: Brain (HarnessRouter client, memory store, harnesses) + orchestrator |
+| B      | `<handle-B>`  | B: Agent integration (config, CLI, MCP, Claude Code hooks, guard) |
+| C      | `<handle-C>`  | C: Surface (API server, dashboard, live feed, demo) |
 
-> Fill in the handles once everyone has accepted the repo invite. Focus areas are a guide for avoiding
-> conflicts, not a hard boundary.
+> Fill in the handles once everyone has accepted the repo invite. Tracks guide file ownership. Anyone may take
+> any ticket.
 
 ### Who am I?
 At the start of every session, determine whose machine you are on — **never assume**:
@@ -30,24 +49,32 @@ Everything below that says "you" means `$ME`. Do not act as, impersonate, or app
 
 ## 2. Golden rules
 
-1. **Never commit or push directly to `main`.** All changes land via Pull Request. (The only exception was the initial bootstrap commit.)
+1. **Never commit or push directly to `main`.** All changes land via Pull Request. The **only** exceptions are
+   ticket status updates made by `scripts/ticket.py` (they touch only `TICKETS.md`) and orchestrator commits to
+   docs/`TICKETS.md`.
 2. **One feature = one branch = one PR.** Keep PRs small and focused (aim for < ~400 changed lines).
 3. **Every PR needs an approving review from at least one *other* member** before merging.
 4. **Never approve or merge your own PR.** Never force-push to someone else's branch.
 5. **Never commit secrets.** `.env` is gitignored — keep it that way. Add new required variables to `.env.example` (names only, no values).
-6. **Claim before you build.** Work starts from a GitHub Issue assigned to you (see §3), so two Claudes never build the same thing.
+6. **Claim before you build.** Claim the ticket in `TICKETS.md` with `scripts/ticket.py` (see §3) so two Claudes never build the same thing.
 
 ---
 
-## 3. Task coordination (GitHub Issues = shared task board)
+## 3. Task coordination (`TICKETS.md` = shared task board)
 
-The three Claudes do not share memory. GitHub is the only shared state, so use it as the source of truth.
+The three Claudes do not share memory. `TICKETS.md` on `origin/main` is the source of truth for who is doing what.
 
-- **Find work:** `gh issue list --state open --search "no:assignee"`
-- **Claim it:** `gh issue edit <N> --add-assignee @me` — then comment a one-line plan: `gh issue comment <N> -b "Plan: ..."`.
-- **Already assigned to someone else?** Do not touch it. Pick another issue or ask your human.
-- **New work discovered mid-task?** Open a new issue (`gh issue create`) rather than expanding scope.
-- **Touching shared/core files** (config, shared interfaces, dependency files like `requirements.txt` / `pyproject.toml`)? Mention it in the issue so the others know, and keep that change in its own small PR when possible — these are the most common merge-conflict sources.
+- **Find work:** `python scripts/ticket.py list --open`. Pick the lowest-numbered OPEN ticket in your track whose
+  dependencies are DONE (or that you can build against the contracts with a fake).
+- **Claim it BEFORE writing any code:** `python scripts/ticket.py claim T-NN`. The script pushes the claim
+  straight to `main` from a temporary worktree (safe from any branch) and retries if someone else pushed first. If it
+  says the ticket is not open, **someone else has it, so pick another.** Never work on a ticket claimed by someone else.
+- **Hold at most 2 claimed tickets.** If you stop working on one, run `python scripts/ticket.py release T-NN`.
+- **PR opened:** `python scripts/ticket.py review T-NN --pr <N>`. **Merged:** `python scripts/ticket.py done T-NN --pr <N>`.
+- **Never edit `Status:` lines by hand, and never touch `TICKETS.md` on a feature branch.** That causes merge conflicts.
+- **New work discovered mid-task?** Don't expand scope. Tell your human so the orchestrator can add a ticket.
+- **Touching shared files** (`pyproject.toml`, contracts, `hive/api/app.py` routes)? Keep the change minimal and
+  mention it in the PR description. These are the most common merge-conflict sources.
 
 ---
 
@@ -101,7 +128,7 @@ Then open the PR and request review from **both** other members (whoever is free
 ```bash
 gh pr create --base main \
   --title "feat: <summary>" \
-  --body "Closes #<issue>
+  --body "Ticket: T-NN
 
 ## What
 <what changed>
@@ -180,14 +207,17 @@ gh pr merge <N> --squash --delete-branch
 
 ## 9. Project commands
 
-> Fill in as the project takes shape (Python project — see `.gitignore`).
-
 ```bash
-# setup:    python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-# test:     pytest
-# lint:     ruff check .
-# run:      <TBD>
+uv sync                                   # install (Python >= 3.11)
+cp .env.example .env                      # then paste the shared HARNESS_ROUTER_KEY (ask the orchestrator)
+uv run pytest                             # tests (live HarnessRouter tests only run with HIVE_LIVE=1)
+uv run ruff check .                       # lint
+uv run hive --help                        # CLI (once T-12 lands)
+uv run uvicorn hive.api.app:app --reload  # API + dashboard (once T-16 lands)
 ```
+
+HarnessRouter costs real money: keep harness budgets tight, don't run harnesses in loops, and gate live tests
+behind `HIVE_LIVE=1`.
 
 ---
 
@@ -197,8 +227,8 @@ gh pr merge <N> --squash --delete-branch
 2. `git fetch origin` — see what's new.
 3. `gh pr list --search "review-requested:@me is:open"` — review teammates first.
 4. `gh pr list --author @me` — handle feedback on your own PRs.
-5. Continue your assigned issue, or claim a new one (§3).
-6. Branch → build → test → rebase → PR → review → author merges.
+5. Continue your claimed ticket, or claim a new one with `scripts/ticket.py` (§3).
+6. Branch → build → test → rebase → PR (`ticket.py review`) → review → author merges (`ticket.py done`).
 
 ---
 
