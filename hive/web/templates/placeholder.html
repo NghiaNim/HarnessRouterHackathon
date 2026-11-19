@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}{{ label }} · Hive{% endblock %}
+{% block content %}
+<h1>{{ label }}</h1>
+{% with title="Coming soon", text=blurb %}{% include "_empty.html" %}{% endwith %}
+{% endblock %}
