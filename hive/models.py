@@ -9,10 +9,24 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from fnmatch import fnmatch
+from functools import lru_cache
 from typing import Literal, Union
 
+import pathspec
 from pydantic import BaseModel, Field
+
+
+def normalize_path(path: str) -> str:
+    """Repo-relative POSIX path: `\\` -> `/`, leading `./` and `/` stripped."""
+    path = path.replace("\\", "/")
+    while path.startswith("./"):
+        path = path[2:]
+    return path.lstrip("/")
+
+
+@lru_cache(maxsize=2048)
+def _scope_spec(patterns: tuple[str, ...]) -> pathspec.PathSpec:
+    return pathspec.PathSpec.from_lines("gitignore", [p.replace("\\", "/") for p in patterns])
 
 
 def new_id() -> str:
@@ -49,7 +63,10 @@ class Decision(BaseModel):
     evidence: str | None = Field(default=None, description="Verbatim human quote it was mined from (T-15)")
 
     def applies_to(self, path: str) -> bool:
-        return any(fnmatch(path, pattern) for pattern in self.scope)
+        """gitignore-style scope matching (T-48): `*` stays within one directory, `**/` matches zero or more
+        directories, a bare directory (`hive/api` or `hive/api/`) covers everything under it, and a pattern
+        without `/` (`*.py`) matches at any depth. Paths are normalized (`./`, `\\`)."""
+        return _scope_spec(tuple(self.scope)).match_file(normalize_path(path))
 
 
 class Handoff(BaseModel):
