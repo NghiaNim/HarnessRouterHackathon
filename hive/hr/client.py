@@ -120,7 +120,7 @@ class HRClient:
 
     @classmethod
     def from_env(cls, **kw: Any) -> HRClient:
-        base = os.environ.get("HARNESS_ROUTER_BASE_URL") or DEFAULT_BASE_URL
+        base = os.environ.get("HARNESS_ROUTER_URL") or DEFAULT_BASE_URL
         return cls(os.environ.get("HARNESS_ROUTER_KEY", ""), base, **kw)
 
     def close(self) -> None:
