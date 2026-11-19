@@ -342,6 +342,32 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** a test shows an accept without the token → 401, a token mismatch → 403, a non-TTY CLI accept is refused, and the
   installer writes the deny rules.
 
+### T-63 · Conflict gate on accept (no LLM needed)
+- **Status:** OPEN
+- **Track:** C (board) + A (detector) · **Size:** M · **Depends on:** T-17 (PR #20), T-10, T-48
+- Found hands-on (all open PRs merged): with "HTTP client is httpx: never requests" accepted on `hive/**`, the board let a human
+  accept "Use requests for all HTTP calls" on `hive/**` **with no warning**. Both became binding, and **the brief injects both
+  contradictory rules into every agent**. That's the worst outcome for pillar 1, and the LLM arbiter (T-22) can't run yet (T-39).
+- `hive/core/conflicts.py`: `candidates(decision, store)` returns accepted decisions with an **overlapping scope** (glob
+  intersection via T-48) and a **lexical conflict signal**: a shared key term (identifier/library/path tokens) where one side
+  negates it ("never", "no", "don't", "avoid", "instead of") and the other prescribes it, or a high token overlap. Score the candidates
+  and return the top 3 with a reason.
+- The accept action (API and `/ui`) returns **409 `possible_conflict`** with the candidates unless the human picks
+  `supersede=<id>` (marks the old one SUPERSEDED via the T-10 flow) or `keep_both=true` (with a required note). The board shows the two rules side by side
+  with those two buttons. The CLI asks the same question. T-22's arbiter verdict, when available, improves the ranking.
+- Defensive brief: if two accepted rules are flagged as conflicting anyway, the brief shows them together under "⚠ conflicting
+  rules: ask your human" instead of as two independent orders.
+- **Done when:** this exact httpx/requests scenario gets a 409 with the httpx rule as a candidate, supersede resolves it, and
+  rules with unrelated scopes (`hive/web/**` vs `tests/**`) never trigger it.
+
+### T-64 · Proposal cards show their evidence
+- **Status:** OPEN
+- **Track:** C · **Size:** S · **Depends on:** T-17, T-08, T-15
+- A human accepting a rule needs to see **why it exists**: the verbatim `evidence` quote (who said it, when), the `source`
+  (session/PR/thread link), and the files being edited when it was said. Show "no evidence: typed by a human" for manual ones.
+  Without this, one-click accept is a rubber stamp.
+- **Done when:** a distiller-proposed decision renders its quote and source on the card, and the accept button sits below the evidence.
+
 ### T-50 · Intent broadcasting from agent sessions
 - **Status:** OPEN
 - **Track:** B · **Size:** M · **Depends on:** T-08, T-12, T-52 (build against SqliteStore first)
