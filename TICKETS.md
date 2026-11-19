@@ -16,6 +16,28 @@
 > claimed tickets at a time. **M1.5 (Differentiators) beats M2.** It's what makes Hive more than "shared memory".
 > Read `docs/PRODUCT.md`, `docs/ARCHITECTURE.md` and `docs/harnessrouter-api.md` first.
 
+## ▶ Next up (orchestrator, updated 2026-11-19 09:00 UTC)
+
+> Read this first when you come back. Status lines below are still the source of truth.
+
+**Blocker for everyone, a human action (NghiaNim):** add HarnessRouter **credit** (min $10 / Developer plan) **and a BYOK Anthropic key**
+in the console (T-39). Until then memory writes return `402 no_credit` and every harness run returns `402 no_key`, so no distiller, guard,
+arbiter or `hive ask` live.
+
+**Merge queue (reviews first, in this order, because each one unblocks the next):**
+1. #18 redaction (T-28): author fixes the review (toolUseResult copy, `{"password":…}` dicts). It blocks the distiller going live.
+2. #19 CLI (T-12): author fixes the review (TTY + typed-id accept guard, `hive init` crash). It unblocks T-14 hooks, T-49, T-62, T-70.
+3. #23 → #26 brief budget + relevance (T-59, T-67), then #24 scope globs (T-48, contract: both reviewers).
+4. #28 dashboard Home (T-69), then #27 conflict detector (T-63), #25 arbiter (T-22), #22 distiller (T-15, stacked on #18:
+   **retarget to main before #18 merges**), #21 spend cap (T-26, author fixes the review).
+
+**Per person, after reviews:**
+- **NghiaNim (A):** fix #18 and #21 → finish or release **T-01** (no PR for hours; it blocks T-09) → **T-09** memory store once credit exists → T-66 injection firewall → T-71 brief wording.
+- **Odysseyc (B):** fix #19 → **T-49** single store resolver → **T-62** hook hot path → **T-14** `hive install` + hooks → T-60 human-only accept → T-70 `hive doctor`.
+- **itsjoshzhang (C):** **T-18** session notes (in progress) → T-64 evidence on cards → T-63 board half (conflict gate UI) → T-55 radar → T-34 shared deploy.
+
+**Demo-critical path:** T-39 credit+key → T-14 hooks → T-15 distiller live → T-20 guard → T-30 demo script. Everything else is polish.
+
 **Tracks:** **A = Brain** (HarnessRouter client, memory store, background harnesses, core logic) ·
 **B = Agent integration** (config, CLI, MCP, Claude Code hooks, guard) · **C = Surface** (API server, dashboard,
 live feed, demo). Anyone can take any track. The tracks only exist to keep file ownership separate (see ARCHITECTURE.md).
