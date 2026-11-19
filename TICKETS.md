@@ -217,7 +217,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** a golden-output test on fixture data passes and the budget is enforced.
 
 ### T-12 · CLI `hive`
-- **Status:** CLAIMED @Odysseyc 2026-11-18
+- **Status:** IN REVIEW @Odysseyc PR #19
 - **Track:** B · **Size:** M · **Depends on:** T-05, T-04 (Sqlite), T-10, T-11 (build against a fake until they land)
 - **Files:** `hive/cli.py`, `tests/test_cli.py`
 - Commands: `init` (memory tree + harnesses), `decide "<statement>" --title --scope --rationale` (propose),
