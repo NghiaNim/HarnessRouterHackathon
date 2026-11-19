@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from hive.core.brief import compose_brief, estimate_tokens
+from hive.core.brief import compose_brief, estimate_tokens, ticket_files
 from hive.models import Decision, DecisionStatus, Handoff, ModuleNote
 from hive.store.sqlite import SqliteStore
 
@@ -135,13 +135,89 @@ def test_golden_brief(store):
     assert (brief.member, brief.branch) == ("alice", "alice/feat/hr")
 
 
-def test_no_changed_paths_means_all_accepted_decisions(store):
-    brief = compose_brief("dave", "main", [], store=store)
-    assert set(brief.decision_ids) >= {"dhttpx0001", "dkey000002"}
-    assert "dreq000004" not in brief.decision_ids
+def test_no_changed_paths_and_no_focus_means_repo_wide_rules_only(store, tmp_path):
+    store.put_decision(
+        Decision(
+            id="drepo00005",
+            title="Conventional commits",
+            statement="Use feat:/fix: prefixes.",
+            scope=["**"],
+            status=DecisionStatus.ACCEPTED,
+            proposed_by="alice",
+            created_at=at(4),
+        )
+    )
+    brief = compose_brief("dave", "main", [], store=store, tickets_path=tmp_path / "missing.md")
+    assert brief.decision_ids == ["drepo00005"]  # path-scoped rules don't apply when we know no paths
+    assert "repo-wide rules only" in brief.markdown
     # dave has no previous session: all teammates' handoffs, newest first
     assert brief.handoff_ids == ["hcarol0003", "hbob000002", "halice0001", "hbobold001"]
     assert brief.module_paths == []
+
+
+TICKETS_MD = """\
+### T-02 · HarnessRouter HTTP client
+- **Status:** CLAIMED @alice 2026-11-18
+- **Files:** `hive/hr/client.py`, `tests/test_hr_client.py`
+
+### T-27 · Dashboard shell
+- **Status:** CLAIMED @carol 2026-11-18
+- **Files:** `hive/web/templates/{base,page}.html`, routes in `hive/api/app.py` (`get_store()`, `HIVE_STORE`)
+"""
+
+
+def test_ticket_files_parses_backticked_paths_and_braces():
+    assert ticket_files(TICKETS_MD, ticket="T-27") == [
+        "hive/web/templates/base.html",
+        "hive/web/templates/page.html",
+        "hive/api/app.py",
+    ]
+    assert ticket_files(TICKETS_MD, member="alice") == ["hive/hr/client.py", "tests/test_hr_client.py"]
+    assert ticket_files(TICKETS_MD, member="al") == []  # handle must match exactly
+    assert ticket_files(TICKETS_MD) == []
+
+
+def test_empty_paths_infer_focus_from_claimed_ticket(store, tmp_path):
+    tickets = tmp_path / "TICKETS.md"
+    tickets.write_text(TICKETS_MD)
+    brief = compose_brief("alice", "alice/feat/hr", [], store=store, tickets_path=tickets)
+    assert brief.decision_ids == ["dhttpx0001", "dcache0003"]  # scoped to hive/hr/client.py
+    assert brief.module_paths == ["hive/hr/client.py"]
+    assert "`hive/hr/client.py`" in brief.markdown and "No changes yet" in brief.markdown
+
+    by_ticket = compose_brief("zed", "zed/x", [], ticket="T-27", store=store, tickets_path=tickets)
+    assert "dkey000002" in by_ticket.decision_ids  # hive/web/** via the T-27 Files line
+
+
+def test_empty_paths_infer_focus_from_this_branchs_handoffs(store, tmp_path):
+    store.put_handoff(
+        Handoff(
+            member="erin",
+            branch="erin/feat/web",
+            summary="started UI",
+            files_touched=["hive/web/app.js"],
+            created_at=at(1),
+        )
+    )
+    brief = compose_brief("erin", "erin/feat/web", [], store=store, tickets_path=tmp_path / "none.md")
+    assert brief.decision_ids == ["dkey000002"]
+    assert brief.module_paths == ["hive/web/app.js"]
+
+
+def test_statement_equal_to_title_is_not_repeated(store):
+    store.put_decision(
+        Decision(
+            id="dsame00006",
+            title="Use ruff",
+            statement="Use ruff",
+            scope=["hive/**"],
+            status=DecisionStatus.ACCEPTED,
+            proposed_by="bob",
+            created_at=at(6),
+        )
+    )
+    md = compose_brief("x", "b", ["hive/a.py"], store=store).markdown
+    assert "- **Use ruff** _(scope: hive/** · id dsame000)_" in md
 
 
 def test_scope_selects_web_decision(store):
@@ -151,7 +227,7 @@ def test_scope_selects_web_decision(store):
     assert "dcache0003" not in brief.decision_ids  # pending, but out of scope
 
 
-def test_budget_drops_lowest_priority_first_but_never_accepted_decisions(store):
+def test_budget_drops_lowest_priority_first(store):
     full = compose_brief("alice", "alice/feat/hr", ["hive/hr/client.py"], store=store)
     tight = compose_brief(
         "alice", "alice/feat/hr", ["hive/hr/client.py"], store=store, budget_tokens=full.token_estimate - 5
@@ -159,11 +235,55 @@ def test_budget_drops_lowest_priority_first_but_never_accepted_decisions(store):
     assert tight.token_estimate <= full.token_estimate - 5
     assert "dcache0003" not in tight.decision_ids  # pending goes first
     assert tight.handoff_ids == full.handoff_ids
+    assert "omitted" in tight.markdown and "hive recall" in tight.markdown
 
-    tiny = compose_brief("alice", "alice/feat/hr", ["hive/hr/client.py"], store=store, budget_tokens=10)
-    assert tiny.decision_ids == ["dhttpx0001"]  # accepted in scope survives even over budget
-    assert tiny.handoff_ids == [] and tiny.module_paths == []
-    assert "omitted" in tiny.markdown and "hive recall" in tiny.markdown
+
+@pytest.mark.parametrize("paths", [["hive/hr/client.py"], []])
+def test_budget_is_a_hard_cap_at_every_size(store, paths):
+    full = compose_brief("alice", "alice/feat/hr", paths, store=store)
+    for budget in range(1, full.token_estimate + 1):
+        assert (
+            compose_brief("alice", "alice/feat/hr", paths, store=store, budget_tokens=budget).token_estimate
+            <= budget
+        )
+
+
+def test_dropped_rules_are_never_silent(store):
+    for i in range(30):
+        store.put_decision(
+            Decision(
+                title=f"Rule {i}",
+                statement=f"Statement number {i} " * 5,
+                scope=["hive/hr/**"],
+                status=DecisionStatus.ACCEPTED,
+                proposed_by="alice",
+                created_at=at(i),
+            )
+        )
+    brief = compose_brief("alice", "alice/feat/hr", ["hive/hr/client.py"], store=store, budget_tokens=400)
+    assert brief.token_estimate <= 400
+    n_rules = len([d for d in brief.decision_ids if d != "dcache0003"])
+    assert 0 < n_rules < 31
+    assert (
+        f"+{31 - n_rules} more rule(s) apply" in brief.markdown and "hive_decisions(path=" in brief.markdown
+    )
+    assert brief.handoff_ids  # rules no longer starve teammates' handoffs
+
+
+def test_more_specific_rules_come_first(store):
+    store.put_decision(
+        Decision(
+            id="dexact0007",
+            title="Client file rule",
+            statement="Exact file.",
+            scope=["hive/hr/client.py"],
+            status=DecisionStatus.ACCEPTED,
+            proposed_by="alice",
+            created_at=at(0),
+        )
+    )
+    brief = compose_brief("alice", "alice/feat/hr", ["hive/hr/client.py"], store=store)
+    assert brief.decision_ids[:2] == ["dexact0007", "dhttpx0001"]
 
 
 def test_drops_oldest_handoff_before_newer(store):
@@ -191,3 +311,51 @@ def test_paths_are_normalized(store):
     brief = compose_brief("bob", "b", ["./hive\\web\\app.js"], store=store)
     assert "dkey000002" in brief.decision_ids
     assert brief.module_paths == ["hive/web/app.js"]
+
+
+# --- T-59 perf fixture: 300 accepted rules, 1,000 handoffs ---------------------
+
+
+@pytest.fixture
+def big_store():
+    s = SqliteStore(":memory:")
+    scopes = [["**"], ["hive/api/**"], ["hive/**/*.py"], ["hive/web/**"], ["tests/**"]]
+    for i in range(300):
+        s.put_decision(
+            Decision(
+                title=f"Rule {i}: keep things consistent",
+                statement=f"Do the consistent thing #{i}, always.",
+                scope=scopes[i % len(scopes)],
+                status=DecisionStatus.ACCEPTED,
+                proposed_by="alice",
+                created_at=at(i),
+            )
+        )
+    for i in range(1000):
+        s.put_handoff(
+            Handoff(
+                member=["bob", "carol"][i % 2],
+                branch=f"feat/{i}",
+                summary=f"Did piece {i} of the work.",
+                learned=["a fact"],
+                created_at=at(i),
+            )
+        )
+    return s
+
+
+@pytest.mark.parametrize("paths", [[], ["hive/api/app.py"]])
+def test_big_store_respects_budget_and_keeps_handoffs(big_store, tmp_path, paths):
+    brief = compose_brief("alice", "alice/feat/x", paths, store=big_store, tickets_path=tmp_path / "none.md")
+    assert brief.token_estimate <= 2000
+    assert len(brief.handoff_ids) >= 1
+    applicable = [
+        d
+        for d in big_store.list_decisions(status=DecisionStatus.ACCEPTED)
+        if (any(d.applies_to(p) for p in paths) if paths else "**" in d.scope)
+    ]
+    assert brief.decision_ids
+    # every applicable rule is either shown or counted in the "+N more" pointer
+    assert len(brief.decision_ids) == len(applicable) or (
+        f"+{len(applicable) - len(brief.decision_ids)} more rule(s) apply" in brief.markdown
+    )
