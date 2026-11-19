@@ -293,7 +293,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** it is tested with FastAPI TestClient on SqliteStore.
 
 ### T-27 · Dashboard shell: layout, nav, static assets
-- **Status:** IN REVIEW @itsjoshzhang PR #16
+- **Status:** DONE @itsjoshzhang PR #20
 - **Track:** C · **Size:** S · **Depends on:** T-16
 - **Files:** `hive/web/templates/base.html`, `hive/web/static/app.css`, `hive/web/static/app.js`, page routes in `hive/api/app.py`
 - Jinja `base.html` with a nav (Radar · Decisions · Timeline · Ask · Impact), HTMX and the SSE extension pinned from a CDN,
