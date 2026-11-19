@@ -284,7 +284,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** a PR that adds a fake `sk-hr-…` fails CI, and the corpus test is green on `redact()`.
 
 ### T-16 · API server (REST)
-- **Status:** IN REVIEW @itsjoshzhang PR #15
+- **Status:** DONE @itsjoshzhang PR #15
 - **Track:** C · **Size:** M · **Depends on:** T-04 (Sqlite), T-10
 - **Files:** `hive/api/app.py`, `tests/test_api.py`; run with `uv run uvicorn hive.api.app:app --reload`
 - `GET/POST /api/decisions`, `POST /api/decisions/{id}/accept|reject`, `GET /api/handoffs`,
