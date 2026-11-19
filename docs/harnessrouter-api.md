@@ -21,7 +21,8 @@ We use it for two things:
 - Auth: `Authorization: Bearer $HARNESS_ROUTER_KEY` (workspace key, prefix `sk-hr-`, lives in `.env`, **never commit**)
 - Send `Idempotency-Key: <uuid4>` on every task-creating POST. Reuse it only when retrying the same request.
 - Error envelope: `{"error": {"type", "code", "message", "param", "detail"}}`. **Match on `code`.**
-  Codes: `invalid_input`(400), `invalid_credential`(401), `payment_required`(402), `insufficient_scope`(403),
+  Codes: `invalid_input`(400), `invalid_credential`(401), `payment_required`(402), **`no_key`(402, verified live: the workspace has no model
+  provider key; the free trial covers agent work and memory, but model usage needs BYOK in the console)**, `insufficient_scope`(403),
   `not_found`(404), `conflict`(409), `session_busy`(409), `file_too_large`(413), `invalid_request`(422),
   `rate_limited`/`too_many_streams`(429), `internal_error|upstream_error|unavailable|timeout`(5xx).
   A 502 `store_write_failed` may mean the work ran, so recover the session and **don't resubmit**.

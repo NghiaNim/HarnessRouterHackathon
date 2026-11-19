@@ -126,7 +126,48 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 
 ---
 
+### T-39 · HarnessRouter: add a model key (BYOK) + live smoke run of every harness
+- **Status:** OPEN
+- **Track:** A (workspace owner) · **Size:** S · **Depends on:** — · **Blocks every live harness run**
+- Found in integration testing: every `run` returns **`402 no_key`**. The free trial covers agent work and memory, but model
+  usage needs our own provider key. The workspace owner adds an Anthropic key in the HarnessRouter console → *Bring Your Own Key*.
+- Then add `scripts/smoke_harnesses.py`, which runs each core harness once on a tiny fixture with `max_cost_usd=0.3` and
+  prints latency, cost, and whether the output parsed. Record the numbers in `docs/harnessrouter-api.md`.
+- **Done when:** all 4 harnesses return valid JSON live, and the latency/cost table is in the docs.
+
 ## M1 · MVP loop (decision → brief → handoff, end to end)
+
+### T-59 · BUG: brief ignores its budget at session start, and rules starve handoffs
+- **Status:** OPEN
+- **Track:** A · **Size:** S · **Depends on:** T-11 (merged) · **Highest-priority M1 bug**
+- Repro (300 accepted rules, 1,000 handoffs, SqliteStore): `compose_brief(changed_paths=[])` returns **8,918 tokens with a
+  2,000 budget**, because empty paths put every rule in scope and "never drop accepted rules" overrides the budget. That's the
+  *normal* SessionStart case (no changes yet on a fresh branch). With `changed_paths=["hive/api/app.py"]`, 65 rules fill the whole
+  budget and **0 handoffs** fit.
+- Fix: (1) the budget is a **hard cap**. Render rules compactly (title + short id; the full statement only for the top-N by
+  scope specificity) and end with "+N more rules apply, call `hive_decisions(path=…)`". (2) **Section quotas**: rules ≤ 55%,
+  teammates' handoffs ≥ 25%, delta/intents ≤ 20%, with unused share flowing down. (3) **Empty paths:** infer focus paths from the
+  claimed ticket's `Files:` line in TICKETS.md, this branch's previous handoffs, and my live intent. Fall back to "repo-wide
+  rules only" (scope `**`).
+- **Done when:** a perf-fixture test asserts `token_estimate ≤ budget` for both cases, and at least 1 handoff is included when one exists.
+
+### T-48 · BUG: scope globs need gitignore semantics
+- **Status:** OPEN
+- **Track:** any · **Size:** S · **Depends on:** — (behavior-only contract PR on `Decision.applies_to`; all active members review)
+- `fnmatch` gets the semantics wrong (verified): `hive/*.py` matches `hive/sub/deep.py`, `**/test_*.py` doesn't match root
+  `test_x.py`, and a plain directory scope `hive/api` or `hive/api/` matches **nothing**, which is exactly what humans will type.
+- Use the `pathspec` library (gitwildmatch): `*` doesn't cross `/`, `**/` matches zero or more dirs, and a bare directory means
+  everything under it. Add a table-driven test with these cases. Normalize `./` and `\`.
+- **Done when:** the cases above behave as expected in `tests/test_contract.py`, and the decision lifecycle and brief tests stay green.
+
+### T-49 · Config unification: one source of truth for store settings
+- **Status:** OPEN
+- **Track:** B · **Size:** S · **Depends on:** T-05 (PR #9)
+- Found in integration testing: `hive.store.get_store()` reads `os.environ` only (default `sqlite`, path `HIVE_DB_PATH`), while
+  `hive.config.Settings` reads `.env` (default `memory`, path `HIVE_SQLITE_PATH`). The same `.env` gives different stores
+  depending on the caller. Make `get_store(settings=None)` use `get_settings()`, keep **one** env name (`HIVE_SQLITE_PATH`, and accept
+  `HIVE_DB_PATH` as a deprecated alias), and default to `sqlite` until T-09 lands. Update `.env.example`.
+- **Done when:** a test proves that a `.env`-only `HIVE_STORE`/path is honored by `get_store()`, the API and the brief.
 
 ### T-10 · Decision lifecycle service
 - **Status:** IN REVIEW @Odysseyc PR #17
@@ -267,6 +308,21 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 > (T-15 mining + T-20 guard), **(2) live collision radar between concurrent agents** (T-50…T-52, T-55), and
 > **(3) ask a teammate's agent instead of Slack** (T-53). Plus **(4) context that knows when it's stale** (T-54).
 > See `docs/PRODUCT.md` → Positioning.
+
+### T-60 · Make "only humans accept" real, not self-declared
+- **Status:** OPEN
+- **Track:** B (CLI/hooks) + C (API/dashboard) · **Size:** M · **Depends on:** T-12, T-16, T-14
+- Found in integration testing: `POST /api/decisions/{id}/accept {"by":"NghiaNim"}` works for **anyone**, including an agent
+  with a Bash tool. That breaks pillar 1. Defense in depth, done honestly:
+  1. **API:** accept/reject require a per-member **human token** (`~/.config/hive/human-token`, created by `hive login`,
+     never in the repo or `.env`). The dashboard asks for it once and stores it in an httpOnly cookie. `by` comes from the token, not the body.
+  2. **CLI:** `hive accept/reject` refuse unless stdin is a TTY and the human types the decision's short id back. Agent Bash
+     tools aren't interactive.
+  3. **`hive install`** adds Claude Code permission **deny** rules: `Bash(hive accept:*)`, `Bash(hive reject:*)`,
+     `Read(~/.config/hive/**)`, and `Bash(curl:*accept*)`.
+  4. The docs say plainly that this is a guardrail against agents, not authentication against malicious humans (that's a non-goal).
+- **Done when:** a test shows an accept without the token → 401, a token mismatch → 403, a non-TTY CLI accept is refused, and the
+  installer writes the deny rules.
 
 ### T-50 · Intent broadcasting from agent sessions
 - **Status:** OPEN
@@ -421,6 +477,16 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - When accepting or editing a decision, show the files its scope globs match right now (`GET /api/scope-preview?glob=`, using
   `git ls-files`), warn on zero matches or `**` (repo-wide), and suggest a tighter glob from the evidence's file paths.
 - **Done when:** the scope chips show match counts, and a zero-match glob shows a warning before accept.
+
+### T-61 · Degraded mode when HarnessRouter runs fail
+- **Status:** OPEN
+- **Track:** A · **Size:** M · **Depends on:** T-15, T-20, T-53 (add each fallback as its ticket lands)
+- Live runs can fail (`402 no_key`, found in testing, plus `429`, timeouts, and the free plan's 2 concurrent tasks). Hive must still be useful:
+  the **distiller** falls back to a heuristic handoff (files touched, `git log`/diff stat, last 3 user prompts) tagged
+  `degraded`, queued for re-distillation. The **guard** runs forbid patterns only (T-56) and says "LLM guard unavailable". The
+  **arbiter** is skipped with a dashboard note. The **oracle** returns the top raw handoffs with "oracle unavailable". The health
+  status shows on the dashboard (`GET /api/health` checks the key, models and a cheap call).
+- **Done when:** with `FakeHRClient` raising `HRError(402, "no_key")`, every command still exits 0 with a clear degraded message.
 
 ## M3 · Demo & polish
 
