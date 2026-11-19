@@ -251,7 +251,7 @@ def test_decision_text_is_html_escaped(client, store):
 def test_board_partial_polls_itself(client):
     html = client.get("/ui/decisions/board").text
     assert 'hx-get="/ui/decisions/board"' in html
-    assert 'hx-trigger="every 5s"' in html
+    assert 'hx-trigger="every 5s [' in html  # paused while the rejected list is open
     assert "<html" not in html
 
 

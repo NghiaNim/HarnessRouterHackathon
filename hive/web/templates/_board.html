@@ -1,4 +1,4 @@
-<section id="board" data-swap-errors hx-get="/ui/decisions/board" hx-trigger="every 5s" hx-swap="outerHTML">
+<section id="board" data-swap-errors hx-get="/ui/decisions/board" hx-trigger="every 5s [!document.querySelector('#board details[open]')]" hx-swap="outerHTML">
   {% if error %}<p class="flash" role="alert">{{ error }}</p>{% endif %}
   <div class="columns">
     {% for label, key, decisions in columns %}
