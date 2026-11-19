@@ -140,7 +140,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 ## M1 · MVP loop (decision → brief → handoff, end to end)
 
 ### T-59 · BUG: brief ignores its budget at session start, and rules starve handoffs
-- **Status:** CLAIMED @NghiaNim 2026-11-18
+- **Status:** IN REVIEW @NghiaNim PR #23
 - **Track:** A · **Size:** S · **Depends on:** T-11 (merged) · **Highest-priority M1 bug**
 - Repro (300 accepted rules, 1,000 handoffs, SqliteStore): `compose_brief(changed_paths=[])` returns **8,918 tokens with a
   2,000 budget**, because empty paths put every rule in scope and "never drop accepted rules" overrides the budget. That's the
