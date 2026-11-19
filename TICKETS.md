@@ -332,6 +332,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   with a Bash tool. That breaks pillar 1. Defense in depth, done honestly:
   1. **API:** accept/reject require a per-member **human token** (`~/.config/hive/human-token`, created by `hive login`,
      never in the repo or `.env`). The dashboard asks for it once and stores it in an httpOnly cookie. `by` comes from the token, not the body.
+     This also covers the HTML form routes `/ui/decisions/{id}/accept|reject` from PR #20, which currently take `by` from a free-text "me" field.
   2. **CLI:** `hive accept/reject` refuse unless stdin is a TTY and the human types the decision's short id back. Agent Bash
      tools aren't interactive.
      *(PR #19 already refuses non-TTY accepts by treating them as `agent:<you>`, verified hands-on. What's left is the typed-id confirmation.)*
