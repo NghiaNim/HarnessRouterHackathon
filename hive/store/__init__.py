@@ -14,13 +14,13 @@ DEFAULT_DB_PATH = ".hive/hive.db"
 def get_store(kind: str | None = None) -> ContextStore:
     """Build the store named by `kind` or `$HIVE_STORE` (default: sqlite).
 
-    sqlite uses `$HIVE_SQLITE_PATH` (default `.hive/hive.db`, gitignored).
+    sqlite uses `$HIVE_DB_PATH` (default `.hive/hive.db`, gitignored).
     """
     kind = (kind or os.environ.get("HIVE_STORE") or "sqlite").strip().lower()
     if kind == "sqlite":
         from hive.store.sqlite import SqliteStore
 
-        return SqliteStore(os.environ.get("HIVE_SQLITE_PATH") or DEFAULT_DB_PATH)
+        return SqliteStore(os.environ.get("HIVE_DB_PATH") or DEFAULT_DB_PATH)
     if kind == "memory":
         try:
             from hive.store.memory import HarnessMemoryStore

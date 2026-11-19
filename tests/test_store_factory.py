@@ -6,7 +6,7 @@ from hive.store.sqlite import SqliteStore
 
 def test_default_is_sqlite_at_hive_db_path(monkeypatch, tmp_path):
     monkeypatch.delenv("HIVE_STORE", raising=False)
-    monkeypatch.setenv("HIVE_SQLITE_PATH", str(tmp_path / "x" / "hive.db"))
+    monkeypatch.setenv("HIVE_DB_PATH", str(tmp_path / "x" / "hive.db"))
     store = get_store()
     assert isinstance(store, SqliteStore)
     assert (tmp_path / "x" / "hive.db").exists()
