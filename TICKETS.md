@@ -11,8 +11,9 @@
 > ```
 > Status values: `OPEN` → `CLAIMED @you date` → `IN REVIEW @you PR #n` → `DONE @you PR #n`.
 >
-> **Picking order:** take the lowest-numbered OPEN ticket in your track whose `Depends on` are all DONE (or that
-> you can build against the contract with a fake). Hold **at most 2** claimed tickets at a time.
+> **Picking order:** sections are in **priority order**, so work top to bottom. Take the first OPEN ticket in your
+> track whose `Depends on` are all DONE (or that you can build against the contract with a fake). Hold **at most 2**
+> claimed tickets at a time. **M1.5 (Differentiators) beats M2.** It's what makes Hive more than "shared memory".
 > Read `docs/PRODUCT.md`, `docs/ARCHITECTURE.md` and `docs/harnessrouter-api.md` first.
 
 **Tracks:** **A = Brain** (HarnessRouter client, memory store, background harnesses, core logic) ·
@@ -58,8 +59,8 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 ### T-03 · Harness provisioning + prompts
 - **Status:** OPEN
 - **Track:** A · **Size:** M · **Depends on:** T-02
-- **Files:** `hive/hr/harnesses.py`, `prompts/{distiller,cartographer,guard,arbiter}.md`, `harnessrouter.json`
-- `ensure_harnesses()` creates or updates the 4 harnesses **by name** (idempotent) with the bases/models/budgets
+- **Files:** `hive/hr/harnesses.py`, `prompts/{distiller,guard,arbiter,oracle}.md`, `harnessrouter.json`
+- `ensure_harnesses()` creates or updates the harnesses (distiller, guard, arbiter, oracle; cartographer only if T-21 is picked up) **by name** (idempotent) with the bases/models/budgets
   from ARCHITECTURE.md, then writes the `{name: id}` map to `harnessrouter.json` (committed).
 - Each prompt demands strict JSON that matches the target pydantic model (include the JSON schema in the prompt).
 - Add a `run_json(harness, input, model_cls)` helper that strips code fences, validates, and retries once on a parse failure.
@@ -99,14 +100,20 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   (`store` fixture) that defaults to SqliteStore on `:memory:` once T-04 lands.
 - **Done when:** T-10/T-11/T-15/T-16 can be tested with no network and no key.
 
-### T-08 · Contract addition: `HiveEvent` + `BriefLog`
+### T-08 · Contract addition: `HiveEvent`, `BriefLog`, `Intent`, evidence fields
 - **Status:** OPEN
-- **Track:** any · **Size:** S · **Depends on:** — (contract PR, so both others review)
+- **Track:** any · **Size:** S · **Depends on:** — (contract PR, so both others review) · **Blocks the M1.5 differentiators, so do it soon**
 - **Files:** `hive/models.py`, `hive/store/base.py`, `tests/test_contract.py`
-- `HiveEvent(id, type: decision_proposed|decision_accepted|decision_rejected|handoff_written|brief_served|check_run,
-  actor, ref_id, at, summary)` for the live feed (T-23). `BriefLog(member, branch, tokens, baseline_tokens, at)` for the
-  tokens-saved meter (T-24). Add **optional** store methods `log_event` and `list_events(since, limit)`. These are additive only.
-- **Done when:** merged with approval from both other members, and the stores (T-04) know they need to implement it.
+- `HiveEvent(id, type: decision_proposed|decision_accepted|decision_rejected|handoff_written|brief_served|check_run|
+  collision_warned|question_answered, actor, ref_id, at, summary)` for the live feed (T-23) and impact counters.
+- `BriefLog(member, branch, tokens, baseline_tokens, at)` for the tokens-saved meter (T-24).
+- `Intent(member, branch, ticket: str|None, summary, paths: list[str], started_at, heartbeat_at, ended_at: datetime|None)`
+  is "what my agent is working on right now" (T-50/T-51). It's keyed by `(member, branch)`.
+- New optional fields: `Decision.evidence: str|None` (the verbatim human quote it was mined from, T-15) and
+  `Handoff.transcript_file_id: str|None` (the HarnessRouter file id of the trimmed transcript, used by `hive ask`, T-53).
+- New store methods: `log_event`, `list_events(since, limit)`, `put_intent` (upsert), and
+  `list_intents(active_within_minutes=15)`. These are additive only.
+- **Done when:** merged with approval from both other members, and the stores (T-04/T-52) know they need to implement it.
 
 ---
 
@@ -126,7 +133,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Track:** A · **Size:** M · **Depends on:** T-04 (Sqlite), T-05
 - **Files:** `hive/core/brief.py`, `tests/test_brief.py`
 - `compose_brief(member, branch, changed_paths, ticket=None, budget_tokens=2000) -> Brief`.
-  Order: (1) accepted decisions in scope, (2) teammates' handoffs since my last session (newest first, skip my own),
+  Order: (0) "who's active where": teammates' live intents (once T-52 lands), (1) accepted decisions in scope, (2) teammates' handoffs since my last session (newest first, skip my own),
   (3) module notes for the touched directories, (4) open proposed decisions, as a "pending" footnote.
   Estimate tokens as len/4 and truncate lowest-priority items first. Never drop accepted in-scope decisions.
 - **Done when:** a golden-output test on fixture data passes and the budget is enforced.
@@ -166,7 +173,13 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - Read the Claude Code JSONL transcript and trim it (drop tool outputs over N chars and keep user/assistant text plus the edited file
   list), add `git diff --stat`, and run `hive-distiller` to get a `Handoff` plus `proposed_decisions[]`. Then save the handoff and
   call `decisions.propose()` with `proposed_by="agent:<member>"` for each proposed decision.
-- **Done when:** a fixture transcript gives a valid Handoff (fake client in the test, one live run recorded in the PR).
+- **Correction mining (differentiator #1):** the prompt specifically hunts for **human corrections and directives** in
+  user turns ("no, use httpx", "never call HR from the browser", "always add a timeout"). Each one becomes a proposed decision
+  with `evidence` = the verbatim user quote and `scope` inferred from the files being edited at that moment. Agent opinions
+  are **not** proposals. Only human words are.
+- Also upload the trimmed transcript (`POST /v1/files`) and set `Handoff.transcript_file_id` (for `hive ask`, T-53).
+- **Done when:** a fixture transcript with 2 human corrections and 1 agent opinion gives exactly 2 proposed decisions with
+  correct evidence quotes (fake client in the test, one live run recorded in the PR).
 
 ### T-16 · API server (REST)
 - **Status:** OPEN
@@ -202,6 +215,71 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 
 ---
 
+## M1.5 · Differentiators (priority over M2, this is the pitch)
+
+> Shared memory alone isn't differentiated. These three pillars are: **(1) corrections become enforced team rules**
+> (T-15 mining + T-20 guard), **(2) live collision radar between concurrent agents** (T-50…T-52, T-55), and
+> **(3) ask a teammate's agent instead of Slack** (T-53). Plus **(4) context that knows when it's stale** (T-54).
+> See `docs/PRODUCT.md` → Positioning.
+
+### T-50 · Intent broadcasting from agent sessions
+- **Status:** OPEN
+- **Track:** B · **Size:** M · **Depends on:** T-08, T-12, T-52 (build against SqliteStore first)
+- **Files:** `hive/core/intents.py`, `hive/cli.py` (`intent` subcommands), `hive/integrations/claude_code.py`
+- SessionStart publishes an `Intent` (member, branch, the ticket parsed from the branch name or from your CLAIMED tickets in
+  TICKETS.md, and a summary from the first user prompt once available). A **PostToolUse** hook on `Edit|Write|MultiEdit` adds the path
+  and bumps `heartbeat_at`, debounced locally to ≤ 1 store write per 30s. SessionEnd sets `ended_at`.
+- **Done when:** two local sessions on different branches show up in `hive who` with correct paths and tickets.
+
+### T-51 · Collision warnings before an agent edits
+- **Status:** OPEN
+- **Track:** B · **Size:** M · **Depends on:** T-50, T-19
+- **Files:** `hive/core/intents.py`, hook entry in `hive/integrations/claude_code.py`
+- A **PreToolUse** hook on `Edit|Write|MultiEdit`: if the target path (or its directory) is in another member's active
+  intent (heartbeat < 15 min), return non-blocking `additionalContext`, for example
+  *"⚠ @bob's agent is editing `hive/api/app.py` for T-16 (2 min ago). Avoid overlapping changes, or run `hive ask @bob ...`."*
+  It must answer in **< 300 ms**, from a local intents cache refreshed in the background, and fail open. Log a `collision_warned` event.
+  Also warn once at SessionStart if *my* changed files overlap someone's active intent.
+- **Done when:** a scripted two-session test produces the warning, and the hook's p95 is < 300 ms with the network off.
+
+### T-52 · Intent storage in both stores
+- **Status:** OPEN
+- **Track:** A · **Size:** S · **Depends on:** T-08, T-04
+- **Files:** `hive/store/sqlite.py`, `hive/store/memory.py`
+- `put_intent` upserts by `(member, branch)`. In the memory store, use an `intents` child memory with one record per member+branch
+  that is PATCHed, not appended (keep memory ops low). `list_intents(active_within_minutes)` filters by heartbeat.
+- **Done when:** the contract test suite covers intents for both stores.
+
+### T-53 · `hive ask @member` — ask a teammate's agent
+- **Status:** OPEN
+- **Track:** A · **Size:** M · **Depends on:** T-15, T-03
+- **Files:** `hive/agents/oracle.py`, `prompts/oracle.md`, CLI `ask` command, MCP tool `hive_ask`
+- Collect @member's recent handoffs (scored against the question) and attach their transcript files (`input_file` blocks
+  with `transcript_file_id`), then run the `hive-oracle` harness to get an answer **with citations** (handoff id or transcript quote).
+  If the evidence doesn't answer the question, the oracle must say "not in Bob's context". No guessing. Follow-ups continue the same
+  HarnessRouter session (`previous_response_id`). Log a `question_answered` event that the member can see on the dashboard.
+- **Done when:** a fixture handoff and transcript answer "why did you change X?" with a citation, and an unrelated question gets
+  "not in context".
+
+### T-54 · Staleness: context that knows it's out of date
+- **Status:** OPEN
+- **Track:** A · **Size:** S · **Depends on:** T-11
+- **Files:** `hive/core/freshness.py`, used by `core/brief.py` and recall
+- For handoffs, run `git diff --name-only <commit_sha>..HEAD` over `files_touched` and tag the result *fresh*, *partly stale (k/n files changed)* or
+  *stale*. The brief drops stale handoffs first and marks partly stale ones. For decisions, flag in-scope globs that match **no files**
+  (dead rules) on the dashboard.
+- **Done when:** a test repo fixture shows each freshness state, and the brief output marks them.
+
+### T-55 · Radar: who's working where (dashboard)
+- **Status:** OPEN
+- **Track:** C · **Size:** M · **Depends on:** T-16, T-52 (poll first, then live via T-23)
+- **Files:** `hive/web/templates/radar.html`, route in `hive/api/app.py` (`GET /api/intents`)
+- A directory tree with each active member's paths highlighted in their color. Overlaps (collisions) are red, and each one links to
+  the ticket and the last heartbeat. This is **the opening shot of the demo**, so make it legible on a projector.
+- **Done when:** two live sessions show up on the radar, and an overlap turns red within about 30s.
+
+---
+
 ## M2 · Smart features (the "wow")
 
 ### T-20 · Decision Guard: `hive check`
@@ -211,14 +289,6 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - Take the diff vs `origin/main`, pick the accepted decisions whose scope matches the changed files, and run `hive-guard`
   to get `Violation[]`. Exit non-zero if any violation is `block`. Usable as a pre-PR step and as an MCP tool.
 - **Done when:** the demo scenario (`import requests` vs the httpx decision) is flagged with the decision id and file.
-
-### T-21 · Cartographer: incremental codebase map
-- **Status:** OPEN
-- **Track:** A · **Size:** L · **Depends on:** T-03, T-04
-- **Files:** `hive/agents/cartographer.py`, `tests/test_cartographer.py`
-- `hive map`: find paths changed since the last mapped SHA (stored on the notes), upload them in batches, run
-  `hive-cartographer` to get `ModuleNote[]`, and upsert them. Do a full map on the first run. Skip binaries, `.env*`, and lockfiles.
-- **Done when:** a second run with no changes makes zero harness calls, and the brief includes notes for touched dirs.
 
 ### T-22 · Arbiter: duplicate & contradiction detection
 - **Status:** OPEN
@@ -239,9 +309,11 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 ### T-24 · Tokens-saved meter
 - **Status:** OPEN
 - **Track:** C · **Size:** S · **Depends on:** T-11, T-16
-- Estimate the baseline as the tokens of the files the module notes summarize, minus the brief tokens actually injected. Log each
-  brief (`member`, `tokens`, `baseline`) and show the running total on the dashboard.
-- **Done when:** the number is visible and the method is explained in a tooltip (be honest that it is an estimate).
+- Estimate the baseline as the tokens of the files referenced by the injected handoffs and decision scopes (the files the agent would have
+  re-read), minus the brief tokens actually injected. Log each brief (`member`, `tokens`, `baseline`) and show the running total on the dashboard.
+- Next to it, add an **impact strip** counted from `HiveEvent`: rules mined from corrections · violations caught · collisions
+  warned · questions answered without Slack. These four numbers are the pitch.
+- **Done when:** the numbers are visible and the method is explained in a tooltip (be honest that tokens saved is an estimate).
 
 ### T-25 · Recall search + codebase map UI
 - **Status:** OPEN
@@ -295,6 +367,14 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 ---
 
 ## Stretch (only after M2 works end to end)
+
+### T-21 · Cartographer: incremental codebase map (deprioritized)
+- **Status:** OPEN
+- **Track:** A · **Size:** L · **Depends on:** T-03, T-04
+- **Why it's stretch:** codebase indexing is commodity (Cursor, Augment, Sourcegraph) and costs a lot of harness time. Handoffs'
+  `learned` lists already give us cheap, human-relevant codebase knowledge. Only pick this up if M1.5 and M2 are done.
+- `hive map`: find paths changed since the last mapped SHA, upload them in batches, run `hive-cartographer` to get `ModuleNote[]`, and upsert them.
+- **Done when:** a second run with no changes makes zero harness calls.
 
 ### T-40 · Slack/thread import → proposed decisions
 - **Status:** OPEN

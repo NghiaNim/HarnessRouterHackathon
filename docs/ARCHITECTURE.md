@@ -21,8 +21,9 @@
  │  Memory tree:  hive/<project>                                                  │
  │                  ├─ decisions     (Decision records)                           │
  │                  ├─ handoffs      (Handoff records)                            │
- │                  └─ codebase      (ModuleNote records)                         │
- │  Harnesses:    hive-distiller · hive-cartographer · hive-guard · hive-arbiter  │
+ │                  ├─ intents       (Intent records, PATCHed per member+branch)  │
+ │                  └─ codebase      (ModuleNote records, stretch)                │
+ │  Harnesses:    hive-distiller · hive-guard · hive-arbiter · hive-oracle        │
  │  Events:       /v1/events (task started/ended)                                 │
  └────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -58,18 +59,21 @@ hive/
   store/memory.py        A  HarnessMemoryStore: HarnessRouter Memory API                          T-04
   hr/client.py           A  HarnessRouter HTTP client: auth, retries, errors, SSE, memory calls   T-02
   hr/harnesses.py        A  idempotent provisioning of our harnesses → harnessrouter.json        T-03
-  agents/distiller.py    A  transcript/diff → Handoff (+ proposed decisions)                      T-09
-  agents/cartographer.py A  repo → ModuleNotes, incremental by git SHA                             T-12
-  agents/arbiter.py      A  new decision vs existing → duplicate / contradicts                     T-14
-  agents/guard.py        B  diff vs accepted decisions → Violations                                T-13
+  agents/distiller.py    A  transcript/diff → Handoff (+ proposed decisions)                      T-15
+  agents/oracle.py       A  `hive ask @member`: answers from a teammate's handoffs + transcript     T-53
+  agents/cartographer.py A  (stretch) repo → ModuleNotes, incremental by git SHA                  T-21
+  core/intents.py        B  intent broadcast + collision check (hot path, < 300 ms, fail open)     T-50, T-51
+  core/freshness.py      A  stale/partly-stale tagging vs git                                     T-54
+  agents/arbiter.py      A  new decision vs existing → duplicate / contradicts                     T-22
+  agents/guard.py        B  diff vs accepted decisions → Violations                                T-20
   core/decisions.py      A  lifecycle: propose → accept/reject/supersede (humans only accept)      T-10
   core/brief.py          A  token-budgeted brief composer                                          T-11
-  cli.py                 B  `hive` CLI                                                             T-06
-  mcp_server.py          B  MCP tools for agents                                                   T-07
-  integrations/claude_code.py B  hooks + .mcp.json installer                                       T-08
-  api/app.py             C  FastAPI REST                                                           T-15
-  api/events.py          C  SSE fan-out (HR /v1/events + Hive events)                              T-17
-  web/templates/, web/static/  C  dashboard                                                        T-16…T-21
+  cli.py                 B  `hive` CLI                                                             T-12
+  mcp_server.py          B  MCP tools for agents                                                   T-13
+  integrations/claude_code.py B  hooks + .mcp.json installer                                       T-14, T-19
+  api/app.py             C  FastAPI REST                                                           T-16
+  api/events.py          C  SSE fan-out (HR /v1/events + Hive events)                              T-23
+  web/templates/, web/static/  C  dashboard                                                        T-17, T-18, T-24, T-55
 prompts/                 A  system prompts for each harness (markdown)
 harnessrouter.json       A  generated harness ids (committed; no secrets)
 tests/                   all
@@ -95,7 +99,8 @@ small PR that **both** other members review. Additive changes (new optional fiel
 | Harness | Base / model | Input | Output (JSON, validated into models) |
 |---|---|---|---|
 | `hive-distiller` | claude-code / claude-haiku-5.5 | session transcript (trimmed) + git diff stat | `Handoff` + `proposed_decisions[]` |
-| `hive-cartographer` | claude-code / claude-sonnet-5.5 | files changed since the last mapped SHA (uploaded) | `ModuleNote[]` |
+| `hive-oracle` | claude-code / claude-sonnet-5.5 | question + teammate's handoffs + transcript files | answer with citations, or "not in context" |
+| `hive-cartographer` *(stretch)* | claude-code / claude-sonnet-5.5 | files changed since the last mapped SHA (uploaded) | `ModuleNote[]` |
 | `hive-guard` | claude-code / claude-haiku-5.5 | unified diff + accepted decisions in scope | `Violation[]` |
 | `hive-arbiter` | claude-code / claude-haiku-5.5 | proposed decision + top-k similar decisions | `{duplicate_of?, contradicts[], note}` |
 
@@ -108,8 +113,11 @@ distillation runs in the background and never blocks the user's agent.
 - **SessionStart hook** → `hive brief --hook`: reads hook JSON on stdin (cwd, session id), computes branch +
   changed paths, and prints a brief (≤ 2,000 tokens) as `additionalContext`.
 - **SessionEnd hook** → `hive handoff --hook`: reads `transcript_path`, spawns the distiller **detached**, and returns at once.
+- **PostToolUse hook** (`Edit|Write|MultiEdit`) → `hive intent touch <path>`: adds the path to my intent and bumps the heartbeat (debounced).
+- **PreToolUse hook** (`Edit|Write|MultiEdit`) → `hive intent check <path>`: warns (never blocks) if a teammate's live intent
+  covers the path. It answers from a local cache in < 300 ms.
 - **MCP tools** (`hive mcp`): `hive_brief`, `hive_recall`, `hive_decisions`, `hive_propose_decision`,
-  `hive_publish_handoff`, `hive_check`. There is **no accept tool**, by design.
+  `hive_publish_handoff`, `hive_check`, `hive_ask`, `hive_who`. There is **no accept tool**, by design.
 - `hive install` writes the hooks to `.claude/settings.json` and the server to `.mcp.json`. Both are project-scoped and committed.
 
 ## Configuration
