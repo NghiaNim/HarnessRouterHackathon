@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from hive.models import Decision, DecisionStatus, Handoff, ModuleNote, RecallHit
+from hive.models import Decision, DecisionStatus, Handoff, HiveEvent, Intent, ModuleNote, RecallHit, utcnow
 from hive.store.base import ContextStore, NotFound
 from hive.store.sqlite import SqliteStore
 
@@ -143,3 +143,52 @@ def test_recall_ranks_and_filters_by_kind(store):
     assert store.recall("kubernetes") == []
     assert store.recall("   ") == []
     assert store.recall("is the") == []  # stopword-only
+
+
+# --- events (T-08) ---------------------------------------------------------
+
+
+def test_events_newest_first_since_and_limit(store):
+    e1 = store.log_event(HiveEvent(type="decision_proposed", actor="agent:alice", ref_id="d1", at=at(0)))
+    e2 = store.log_event(HiveEvent(type="decision_accepted", actor="bob", ref_id="d1", at=at(10)))
+    e3 = store.log_event(HiveEvent(type="brief_served", actor="alice", summary="900 tokens", at=at(20)))
+
+    assert store.list_events() == [e3, e2, e1]
+    assert store.list_events(since=at(10)) == [e3]  # strictly after `since`
+    assert store.list_events(since=at(0).replace(tzinfo=None)) == [e3, e2]  # naive = UTC
+    assert store.list_events(limit=2) == [e3, e2]
+
+
+# --- intents (T-08) --------------------------------------------------------
+
+
+def make_intent(**kw) -> Intent:
+    now = utcnow()
+    base = dict(
+        member="alice", branch="alice/feat/x", summary="wiring retries", started_at=now, heartbeat_at=now
+    )
+    return Intent(**{**base, **kw})
+
+
+def test_put_intent_upserts_by_member_and_branch(store):
+    first = store.put_intent(make_intent(paths=["a.py"]))
+    second = store.put_intent(make_intent(paths=["a.py", "b.py"], ticket="T-08"))
+    assert first.id != second.id  # a fresh object, same (member, branch) key
+    assert store.list_intents() == [second]
+    other = store.put_intent(make_intent(branch="alice/feat/y"))
+    assert {i.branch for i in store.list_intents()} == {"alice/feat/x", other.branch}
+
+
+def test_list_intents_filters_stale_and_ended(store):
+    now = utcnow()
+    fresh = store.put_intent(make_intent(member="alice", heartbeat_at=now - timedelta(minutes=1)))
+    older = store.put_intent(
+        make_intent(member="bob", branch="bob/x", heartbeat_at=now - timedelta(minutes=10))
+    )
+    stale = store.put_intent(make_intent(member="carol", branch="c/x", heartbeat_at=now - timedelta(hours=2)))
+    store.put_intent(make_intent(member="dave", branch="d/x", ended_at=now))
+
+    assert store.list_intents() == [fresh, older]  # default 15 min, newest heartbeat first
+    assert store.list_intents(active_within_minutes=5) == [fresh]
+    everything = store.list_intents(active_within_minutes=None)
+    assert len(everything) == 4 and everything[-1] == stale  # oldest heartbeat last

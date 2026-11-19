@@ -9,10 +9,20 @@ from __future__ import annotations
 import re
 import sqlite3
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from hive.models import Decision, DecisionStatus, Handoff, ItemKind, ModuleNote, RecallHit
+from hive.models import (
+    Decision,
+    DecisionStatus,
+    Handoff,
+    HiveEvent,
+    Intent,
+    ItemKind,
+    ModuleNote,
+    RecallHit,
+    utcnow,
+)
 from hive.store.base import NotFound
 
 _SCHEMA = """
@@ -33,6 +43,19 @@ CREATE INDEX IF NOT EXISTS handoffs_created ON handoffs(created_at);
 CREATE TABLE IF NOT EXISTS module_notes (
     path TEXT PRIMARY KEY,
     data TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS events (
+    id TEXT PRIMARY KEY,
+    at TEXT NOT NULL,
+    data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS events_at ON events(at);
+CREATE TABLE IF NOT EXISTS intents (
+    member TEXT NOT NULL,
+    branch TEXT NOT NULL,
+    heartbeat_at TEXT NOT NULL,
+    data TEXT NOT NULL,
+    PRIMARY KEY (member, branch)
 );
 """
 
@@ -155,6 +178,48 @@ class SqliteStore:
         if prefix is not None:
             notes = [n for n in notes if n.path.startswith(prefix)]
         return notes
+
+    # --- activity feed -------------------------------------------------------
+
+    def log_event(self, event: HiveEvent) -> HiveEvent:
+        self._write(
+            "INSERT OR REPLACE INTO events (id, at, data) VALUES (?, ?, ?)",
+            (event.id, _ts(event.at), event.model_dump_json()),
+        )
+        return event
+
+    def list_events(self, since: datetime | None = None, limit: int = 50) -> list[HiveEvent]:
+        sql, params = "SELECT data FROM events", []
+        if since is not None:
+            sql += " WHERE at > ?"
+            params.append(_ts(since))
+        sql += " ORDER BY at DESC LIMIT ?"
+        params.append(limit)
+        return [HiveEvent.model_validate_json(r[0]) for r in self._rows(sql, tuple(params))]
+
+    # --- intents -------------------------------------------------------------
+
+    def put_intent(self, intent: Intent) -> Intent:
+        self._write(
+            "INSERT OR REPLACE INTO intents (member, branch, heartbeat_at, data) VALUES (?, ?, ?, ?)",
+            (intent.member, intent.branch, _ts(intent.heartbeat_at), intent.model_dump_json()),
+        )
+        return intent
+
+    def list_intents(self, active_within_minutes: float | None = 15) -> list[Intent]:
+        sql, params = "SELECT data FROM intents", ()
+        if active_within_minutes is not None:
+            # Coarse SQL prefilter on heartbeat; is_active() applies the exact rule (incl. ended_at).
+            sql, params = (
+                sql + " WHERE heartbeat_at >= ?",
+                (_ts(utcnow() - timedelta(minutes=active_within_minutes)),),
+            )
+        intents = [
+            Intent.model_validate_json(r[0]) for r in self._rows(sql + " ORDER BY heartbeat_at DESC", params)
+        ]
+        if active_within_minutes is not None:
+            intents = [i for i in intents if i.is_active(active_within_minutes)]
+        return intents
 
     # --- search --------------------------------------------------------------
 
