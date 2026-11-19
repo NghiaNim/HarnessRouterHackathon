@@ -226,7 +226,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   handoff record within about 2 min.
 
 ### T-15 · Distiller harness: transcript → Handoff
-- **Status:** OPEN
+- **Status:** CLAIMED @NghiaNim 2026-11-18
 - **Track:** A · **Size:** M · **Depends on:** T-03, T-04
 - **Files:** `hive/agents/distiller.py`, `tests/test_distiller.py`
 - **Redaction (T-28, PR #18):** pass every outbound string through `hive.core.redact.Redactor` (transcript upload + harness input) and assert it in a test.
