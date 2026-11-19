@@ -54,7 +54,7 @@ def test_requires_key():
 
 def test_from_env(monkeypatch):
     monkeypatch.setenv("HARNESS_ROUTER_KEY", "sk-hr-env")
-    monkeypatch.delenv("HARNESS_ROUTER_BASE_URL", raising=False)
+    monkeypatch.delenv("HARNESS_ROUTER_URL", raising=False)
     with HRClient.from_env() as c:
         assert c.base_url == DEFAULT_BASE_URL
 
