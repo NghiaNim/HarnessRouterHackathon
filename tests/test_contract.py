@@ -59,3 +59,36 @@ def test_intent_is_active():
     assert not i.model_copy(update={"ended_at": now}).is_active(15, now=now)
     naive = i.model_copy(update={"heartbeat_at": (now - timedelta(minutes=1)).replace(tzinfo=None)})
     assert naive.is_active(15, now=now)  # naive datetimes are treated as UTC
+
+
+# --- T-48: gitignore semantics for scope globs ------------------------------
+
+
+@pytest.mark.parametrize(
+    ("scope", "path", "expected"),
+    [
+        ("hive/*.py", "hive/a.py", True),
+        ("hive/*.py", "hive/sub/deep.py", False),  # fnmatch said True
+        ("**/test_*.py", "test_x.py", True),  # fnmatch said False
+        ("**/test_*.py", "tests/a/test_y.py", True),
+        ("hive/api", "hive/api/app.py", True),  # fnmatch matched nothing
+        ("hive/api/", "hive/api/app.py", True),
+        ("hive/api", "hive/apis/x.py", False),
+        ("hive/**", "hive/hr/client.py", True),
+        ("hive/**/*.py", "hive/x.py", True),
+        ("tests/**", "hive/tests/x.py", False),
+        ("*.md", "docs/deep/README.md", True),
+        ("**", "anything/at/all.txt", True),
+        ("hive/api/**", "./hive/api/app.py", True),  # normalized
+        ("hive/api/**", "hive\\api\\app.py", True),  # Windows separators
+        ("hive\\web\\**", "hive/web/x.js", True),  # Windows-typed scope
+    ],
+)
+def test_scope_gitignore_semantics(scope, path, expected):
+    d = Decision(title="t", statement="s", proposed_by="alice", scope=[scope])
+    assert d.applies_to(path) is expected
+
+
+def test_scope_negation_and_multiple_patterns():
+    d = Decision(title="t", statement="s", proposed_by="alice", scope=["hive/**", "!hive/web/**"])
+    assert d.applies_to("hive/hr/client.py") and not d.applies_to("hive/web/app.js")
