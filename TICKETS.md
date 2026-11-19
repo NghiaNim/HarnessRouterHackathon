@@ -198,7 +198,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   correct evidence quotes (fake client in the test, one live run recorded in the PR).
 
 ### T-28 · Secret redaction before anything leaves the machine
-- **Status:** OPEN
+- **Status:** CLAIMED @NghiaNim 2026-11-18
 - **Track:** A · **Size:** S · **Depends on:** — · **Blocks T-15 going live** (no transcript upload without it)
 - **Files:** `hive/core/redact.py`, `tests/test_redact.py`
 - Transcripts and diffs contain secrets (the agent `cat`s `.env`, prints tokens, and so on). Before any upload, memory write, or harness
