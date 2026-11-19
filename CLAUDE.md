@@ -30,7 +30,7 @@ than silently expanding scope.
 | Member | GitHub handle | Primary track |
 |--------|---------------|---------------|
 | A      | `NghiaNim`    | A: Brain (HarnessRouter client, memory store, harnesses) + orchestrator |
-| B      | `<handle-B>`  | B: Agent integration (config, CLI, MCP, Claude Code hooks, guard) |
+| B      | `Odysseyc`    | B: Agent integration (config, CLI, MCP, Claude Code hooks, guard) |
 | C      | `<handle-C>`  | C: Surface (API server, dashboard, live feed, demo) |
 
 > Fill in the handles once everyone has accepted the repo invite. Tracks guide file ownership. Anyone may take

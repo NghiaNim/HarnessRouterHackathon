@@ -91,6 +91,23 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - Use uv: `uv sync`, `uv run ruff check .`, `uv run pytest`. Live tests are skipped (no secret in CI).
 - **Done when:** a PR shows a green check.
 
+### T-07 · Test fakes & fixtures (unblocks B and C without live calls)
+- **Status:** OPEN
+- **Track:** A · **Size:** S · **Depends on:** — (match T-02's method names; coordinate in the PR)
+- **Files:** `tests/fakes.py`, `tests/conftest.py`, `tests/fixtures/` (sample transcript JSONL, sample diff, seed decisions)
+- `FakeHRClient` with canned `run()` outputs keyed by harness name, and an in-memory `ContextStore` fixture
+  (`store` fixture) that defaults to SqliteStore on `:memory:` once T-04 lands.
+- **Done when:** T-10/T-11/T-15/T-16 can be tested with no network and no key.
+
+### T-08 · Contract addition: `HiveEvent` + `BriefLog`
+- **Status:** OPEN
+- **Track:** any · **Size:** S · **Depends on:** — (contract PR, so both others review)
+- **Files:** `hive/models.py`, `hive/store/base.py`, `tests/test_contract.py`
+- `HiveEvent(id, type: decision_proposed|decision_accepted|decision_rejected|handoff_written|brief_served|check_run,
+  actor, ref_id, at, summary)` for the live feed (T-23). `BriefLog(member, branch, tokens, baseline_tokens, at)` for the
+  tokens-saved meter (T-24). Add **optional** store methods `log_event` and `list_events(since, limit)`. These are additive only.
+- **Done when:** merged with approval from both other members, and the stores (T-04) know they need to implement it.
+
 ---
 
 ## M1 · MVP loop (decision → brief → handoff, end to end)
@@ -174,6 +191,15 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - A feed of handoffs per member and branch, with expandable learned/gotchas/open questions. Link to the HarnessRouter
   session share link when there is one.
 
+### T-19 · Hook resilience: fail open, fast, cached
+- **Status:** OPEN
+- **Track:** B · **Size:** S · **Depends on:** T-14
+- **Files:** `hive/integrations/claude_code.py`, `hive/cli.py` (hook paths only)
+- A Hive failure must **never** break or slow a teammate's Claude Code session. `brief --hook` has a hard 3s timeout,
+  falls back to the last cached brief in `~/.cache/hive/<project>/brief.md`, and if that fails it prints nothing and exits 0.
+  `handoff --hook` writes the transcript path to a local queue file before detaching, and `hive handoff --flush` retries queued ones.
+- **Done when:** tests prove the timeout and fallback paths, and running with no network or no key still exits 0 quickly.
+
 ---
 
 ## M2 · Smart features (the "wow")
@@ -222,6 +248,15 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Track:** C · **Size:** S · **Depends on:** T-16, T-21
 - A search box (calls `/api/recall`) with typed result cards, and a collapsible tree of module notes.
 
+### T-26 · Cost guardrail for HarnessRouter spend
+- **Status:** OPEN
+- **Track:** A · **Size:** S · **Depends on:** T-02
+- **Files:** `hive/hr/client.py` (hook point), `hive/hr/budget.py`
+- Track the cost of each `run()` (from the response usage/cost if present, otherwise the harness `max_cost_usd` as an upper bound) in
+  `~/.cache/hive/spend.jsonl`. Enforce `HIVE_DAILY_BUDGET_USD` (default 5) by refusing new runs with a clear message.
+  `hive spend` prints today's total per harness.
+- **Done when:** exceeding the budget blocks runs in a test, and the dashboard can read the total (expose it via `/api/spend` in a follow-up).
+
 ---
 
 ## M3 · Demo & polish
@@ -241,6 +276,21 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Status:** OPEN
 - **Track:** any · **Size:** S · **Depends on:** T-30
 - Cover the problem, the loop, the HarnessRouter usage (Memory tree, 4 harnesses, Events), the tokens-saved number, and what's next.
+
+### T-33 · Dogfood: run Hive on this repo for all 3 members
+- **Status:** OPEN
+- **Track:** any · **Size:** S · **Depends on:** T-14, T-04 (memory store), T-19
+- Commit the `hive install` output for this repo and have every member's Claude Code use it for the rest of the
+  hackathon. Seed the real decisions we've already made (the stack table in ARCHITECTURE.md, "humans decide, agents
+  propose", contract rule) as accepted decisions. Collect 2–3 real "it caught/saved us" moments for the pitch in `docs/DEMO.md`.
+- **Done when:** all 3 members have had at least one session start with a brief and end with a handoff.
+
+### T-34 · Shared dashboard deployment
+- **Status:** OPEN
+- **Track:** C · **Size:** S · **Depends on:** T-16, T-17
+- Make one URL the whole team (and judges) can open: run the server on one machine and expose it with a tunnel, or
+  deploy a container. The key lives only in the server env. Document it in the README.
+- **Done when:** a teammate on another network can accept a decision through the shared URL.
 
 ---
 
@@ -266,3 +316,15 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Status:** OPEN
 - **Track:** A · **Size:** M · **Depends on:** T-04
 - A per-member child memory with restricted grants, plus the `user` field on runs, for scratch notes that aren't shared.
+
+### T-44 · Non-Claude agents: AGENTS.md brief export
+- **Status:** OPEN
+- **Track:** B · **Size:** S · **Depends on:** T-11, T-12
+- `hive brief --write-agents-md` writes or refreshes a marked `<!-- hive:brief -->` section in `AGENTS.md`, so Codex
+  and other harnesses get the same decisions with no hooks. This shows Hive is harness-agnostic, which ties into the HarnessRouter pitch.
+
+### T-45 · Decision history & provenance view
+- **Status:** OPEN
+- **Track:** C · **Size:** S · **Depends on:** T-17, T-04 (memory store)
+- On the decision detail page, show the version history (`GET /v1/memories/{id}/records/{rid}/history`), who proposed and who
+  accepted it, the supersede chain, and the source (session/PR/thread).
