@@ -1,0 +1,73 @@
+[
+  {
+    "id": "d0000000000000000000000000000001",
+    "title": "HTTP client is httpx",
+    "statement": "Use httpx with an explicit timeout; never requests.",
+    "rationale": "One client for sync and async code.",
+    "scope": [
+      "hive/**/*.py"
+    ],
+    "status": "accepted",
+    "proposed_by": "alice",
+    "decided_by": "bob",
+    "created_at": "2026-11-10T09:00:00Z",
+    "decided_at": "2026-11-10T09:30:00Z",
+    "tags": [
+      "http"
+    ]
+  },
+  {
+    "id": "d0000000000000000000000000000002",
+    "title": "Browser never sees the HarnessRouter key",
+    "statement": "Never call HarnessRouter from browser code; go through the Hive API server.",
+    "rationale": "The key is a shared workspace secret.",
+    "scope": [
+      "hive/web/**"
+    ],
+    "status": "accepted",
+    "proposed_by": "carol",
+    "decided_by": "alice",
+    "created_at": "2026-11-11T09:00:00Z",
+    "decided_at": "2026-11-11T10:00:00Z",
+    "tags": [
+      "security"
+    ]
+  },
+  {
+    "id": "d0000000000000000000000000000003",
+    "title": "Dashboard uses HTMX",
+    "statement": "Dashboard is Jinja + HTMX + SSE; no Node build step.",
+    "scope": [
+      "hive/web/**"
+    ],
+    "status": "accepted",
+    "proposed_by": "carol",
+    "decided_by": "bob",
+    "created_at": "2026-11-12T09:00:00Z",
+    "decided_at": "2026-11-12T09:10:00Z"
+  },
+  {
+    "id": "d0000000000000000000000000000004",
+    "title": "Cache GET /v1/bases",
+    "statement": "Cache /v1/bases responses for one hour.",
+    "scope": [
+      "hive/hr/**"
+    ],
+    "status": "proposed",
+    "proposed_by": "agent:alice",
+    "created_at": "2026-11-13T09:00:00Z"
+  },
+  {
+    "id": "d0000000000000000000000000000005",
+    "title": "Use requests for HTTP",
+    "statement": "Use the requests library.",
+    "scope": [
+      "**"
+    ],
+    "status": "rejected",
+    "proposed_by": "agent:bob",
+    "decided_by": "alice",
+    "created_at": "2026-11-09T09:00:00Z",
+    "decided_at": "2026-11-09T09:05:00Z"
+  }
+]

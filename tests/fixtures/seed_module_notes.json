@@ -1,0 +1,31 @@
+[
+  {
+    "id": "m0000000000000000000000000000001",
+    "path": "hive/hr/client.py",
+    "summary": "Sync httpx HarnessRouter client: retries, SSE, memory calls.",
+    "key_symbols": [
+      "HRClient",
+      "HRError",
+      "RunResult",
+      "iter_sse"
+    ],
+    "depends_on": [
+      "httpx"
+    ],
+    "commit_sha": "abc1234",
+    "updated_at": "2026-11-14T18:00:00Z"
+  },
+  {
+    "id": "m0000000000000000000000000000002",
+    "path": "hive/store/sqlite.py",
+    "summary": "SqliteStore: local ContextStore with keyword recall.",
+    "key_symbols": [
+      "SqliteStore"
+    ],
+    "depends_on": [
+      "hive.models"
+    ],
+    "commit_sha": "abc1234",
+    "updated_at": "2026-11-14T18:00:00Z"
+  }
+]

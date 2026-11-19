@@ -1,0 +1,36 @@
+[
+  {
+    "id": "h0000000000000000000000000000001",
+    "member": "alice",
+    "branch": "alice/feat/hr-retries",
+    "ticket": "T-02",
+    "summary": "Added retry/backoff to the HarnessRouter client.",
+    "learned": [
+      "/v1/bases wraps its list under 'bases'"
+    ],
+    "gotchas": [
+      "Never retry store_write_failed"
+    ],
+    "files_touched": [
+      "hive/hr/client.py"
+    ],
+    "next_steps": [
+      "Wire memory store"
+    ],
+    "created_at": "2026-11-14T18:00:00Z"
+  },
+  {
+    "id": "h0000000000000000000000000000002",
+    "member": "bob",
+    "branch": "bob/feat/cli",
+    "ticket": "T-12",
+    "summary": "CLI skeleton with decide/accept/brief.",
+    "learned": [
+      "typer CliRunner needs mix_stderr=False"
+    ],
+    "files_touched": [
+      "hive/cli.py"
+    ],
+    "created_at": "2026-11-15T18:00:00Z"
+  }
+]
