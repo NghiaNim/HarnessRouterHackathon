@@ -236,6 +236,8 @@ def run_json(
     try:
         return parse_json(result.text, model_cls)
     except JSONOutputError as e:
+        if not result.response_id:
+            raise  # can't continue the session, and a retry without the input would be context-free
         fix = (
             f"Your reply was not valid JSON for the required schema ({e}). "
             "Reply again with ONLY the JSON value: no prose, no code fences."

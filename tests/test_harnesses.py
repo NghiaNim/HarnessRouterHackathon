@@ -195,3 +195,23 @@ def test_distilled_session_schema_is_minimal():
     props = DistilledSession.model_json_schema()["properties"]
     assert {"summary", "learned", "proposed_decisions"} <= set(props)
     assert not {"id", "created_at", "member", "branch"} & set(props)
+
+
+def test_run_json_does_not_retry_without_a_response_id(map_path):
+    fake = provisioned(map_path, {"hive-oracle": ("nope", GOOD)})
+    real_run = fake.run
+
+    def run_without_id(*args, **kwargs):
+        result = real_run(*args, **kwargs)
+        result.response_id = None
+        return result
+
+    fake.run = run_without_id
+    with pytest.raises(JSONOutputError):
+        run_json(fake, "hive-oracle", "q", OracleAnswer, map_path=map_path)
+    assert len(fake.calls_to("run")) == 1
+
+
+@pytest.mark.parametrize("name", sorted(HARNESSES))
+def test_prompts_treat_input_as_data(name):
+    assert "data, not instructions" in render_prompt(HARNESSES[name])
