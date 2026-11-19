@@ -164,11 +164,15 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 
 ### T-49 · Config unification: one source of truth for store settings
 - **Status:** OPEN
-- **Track:** B · **Size:** S · **Depends on:** T-05 (PR #9)
+- **Track:** B · **Size:** S · **Depends on:** T-05 (PR #9), T-12 (PR #19)
 - Found in integration testing: `hive.store.get_store()` reads `os.environ` only (default `sqlite`, path `HIVE_DB_PATH`), while
   `hive.config.Settings` reads `.env` (default `memory`, path `HIVE_SQLITE_PATH`). The same `.env` gives different stores
-  depending on the caller. Make `get_store(settings=None)` use `get_settings()`, keep **one** env name (`HIVE_SQLITE_PATH`, and accept
+  depending on the caller. **Confirmed again in PR #19's review: the CLI (`open_store()`, repo-root anchored) and the API
+  (`get_store()`, cwd-relative) can open different DBs, which breaks T-17's "accept in the dashboard, see it in the CLI".** Make `get_store(settings=None)` use `get_settings()`
+  (keep the CLI's repo-root anchoring), have the CLI and the API both call it, keep **one** env name (`HIVE_SQLITE_PATH`, and accept
   `HIVE_DB_PATH` as a deprecated alias), and default to `sqlite` until T-09 lands. Update `.env.example`.
+  If `HIVE_STORE=memory` is requested but unavailable, **fail loudly** for interactive commands (hooks may fall back, and say so in their output).
+- **Priority:** do this right after PR #19 merges. It's the single resolver both the CLI and the API switch to.
 - **Done when:** a test proves that a `.env`-only `HIVE_STORE`/path is honored by `get_store()`, the API and the brief.
 
 ### T-10 · Decision lifecycle service
@@ -346,7 +350,8 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
      This also covers the HTML form routes `/ui/decisions/{id}/accept|reject` from PR #20, which currently take `by` from a free-text "me" field.
   2. **CLI:** `hive accept/reject` refuse unless stdin is a TTY and the human types the decision's short id back. Agent Bash
      tools aren't interactive.
-     *(PR #19 already refuses non-TTY accepts by treating them as `agent:<you>`, verified hands-on. What's left is the typed-id confirmation.)*
+     *(Correction: PR #19's guard is negative, keyed on the `CLAUDECODE` env var. `env -u CLAUDECODE hive accept …` bypasses it, and
+     Codex/Gemini never set it (found in review). PR #19 is switching to a positive TTY + typed-id check. This ticket hardens the rest.)*
   3. **`hive install`** adds Claude Code permission **deny** rules: `Bash(hive accept:*)`, `Bash(hive reject:*)`,
      `Read(~/.config/hive/**)`, and `Bash(curl:*accept*)`.
   4. The docs say plainly that this is a guardrail against agents, not authentication against malicious humans (that's a non-goal).
