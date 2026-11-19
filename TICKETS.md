@@ -194,6 +194,17 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** a fixture transcript with 2 human corrections and 1 agent opinion gives exactly 2 proposed decisions with
   correct evidence quotes (fake client in the test, one live run recorded in the PR).
 
+### T-28 · Secret redaction before anything leaves the machine
+- **Status:** OPEN
+- **Track:** A · **Size:** S · **Depends on:** — · **Blocks T-15 going live** (no transcript upload without it)
+- **Files:** `hive/core/redact.py`, `tests/test_redact.py`
+- Transcripts and diffs contain secrets (the agent `cat`s `.env`, prints tokens, and so on). Before any upload, memory write, or harness
+  input, scrub: values of every key in the local `.env`, `sk-[A-Za-z0-9-]{20,}` / `sk-hr-…`, `gh[pousr]_…`, AWS keys,
+  `-----BEGIN … PRIVATE KEY-----` blocks, JWTs, and `password=`/`token=` assignments. Replace each with `[REDACTED:<kind>]`.
+  Also drop tool outputs that read files matching `.env*`, `*.pem` or `id_*` entirely.
+- **Done when:** a fixture transcript seeded with each secret type comes out clean, and the distiller and memory store call
+  `redact()` on every outbound path (assert it in their tests).
+
 ### T-16 · API server (REST)
 - **Status:** IN REVIEW @itsjoshzhang PR #15
 - **Track:** C · **Size:** M · **Depends on:** T-04 (Sqlite), T-10
@@ -313,6 +324,27 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 
 ---
 
+### T-56 · Instant rule enforcement: forbid patterns at edit time
+- **Status:** OPEN
+- **Track:** B · **Size:** M · **Depends on:** T-51 (shares the PreToolUse hook), contract mini-PR for one field
+- **Files:** `hive/models.py` (additive `Decision.forbid_patterns: list[str] = []`, a contract PR), `hive/core/rules.py`
+- Many rules are mechanically checkable ("never `import requests`", "no `fetch(` to api.harnessrouter.ai in templates").
+  Accepted decisions can carry regexes. The **PreToolUse** hook on `Edit|Write` checks the *new content* for in-scope
+  files against them in < 50 ms with no LLM, then **denies** the edit with the decision title and evidence quote
+  (this is the only blocking hook, and only for accepted human decisions). The Distiller/Arbiter *suggest* patterns, and
+  a human confirms them on accept.
+- **Done when:** with the httpx decision accepted, an agent's `Write` that adds `import requests` to `hive/**` is denied
+  instantly with the rule cited, and a file outside the scope is allowed. Log a `check_run` event.
+
+### T-57 · Brief delta: "since your last session"
+- **Status:** OPEN
+- **Track:** A · **Size:** S · **Depends on:** T-11, T-08
+- **Files:** `hive/core/brief.py` (new section), uses `list_events(since=last BriefLog for me)`
+- Top of the brief: decisions accepted/rejected since my last session (**especially ones I proposed**), questions
+  teammates asked about my work via `hive ask` (with the answer they got, so I can correct it), and collisions involving my paths.
+  Hard cap of 300 tokens for this section.
+- **Done when:** a test with events between two BriefLogs renders the delta, and an empty delta renders nothing.
+
 ## M2 · Smart features (the "wow")
 
 ### T-20 · Decision Guard: `hive check`
@@ -364,6 +396,29 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 
 ---
 
+### T-58 · Remote MCP endpoint + attach Hive to HarnessRouter harnesses
+- **Status:** OPEN
+- **Track:** B · **Size:** M · **Depends on:** T-13, T-16
+- **Files:** `hive/api/mcp_http.py` (mount the same FastMCP tools over streamable HTTP at `/mcp`), `hive/hr/harnesses.py`
+- Agents running **on HarnessRouter** (not on a laptop) should also obey team decisions. Expose the MCP tools over HTTP with a
+  per-team bearer token (not the HR key). Add an `attach_hive(harness_id)` that PUTs `mcp_servers` on any HR harness so it
+  gets `hive_brief`/`hive_recall`/`hive_check`. This makes "harness-agnostic" literally true.
+- **Done when:** a HarnessRouter `claude-code` harness with Hive attached calls `hive_brief` in a live task (recorded in the PR).
+
+### T-37 · `hive pause`: private sessions
+- **Status:** OPEN
+- **Track:** B · **Size:** S · **Depends on:** T-14, T-50
+- `hive pause [--for 2h]` / `hive resume`: while paused, this machine doesn't broadcast intents or write handoffs (briefs
+  still come in). A marker in `~/.cache/hive/paused`. The SessionStart output says "Hive paused" so the human knows.
+- **Done when:** a paused session leaves no intent or handoff records, and the pause expires automatically.
+
+### T-38 · Scope preview & glob helper on the decision board
+- **Status:** OPEN
+- **Track:** C · **Size:** S · **Depends on:** T-17
+- When accepting or editing a decision, show the files its scope globs match right now (`GET /api/scope-preview?glob=`, using
+  `git ls-files`), warn on zero matches or `**` (repo-wide), and suggest a tighter glob from the evidence's file paths.
+- **Done when:** the scope chips show match counts, and a zero-match glob shows a warning before accept.
+
 ## M3 · Demo & polish
 
 ### T-30 · Demo scenario + seed script
@@ -398,6 +453,22 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** a teammate on another network can accept a decision through the shared URL.
 
 ---
+
+### T-35 · Simulated teammates on HarnessRouter (demo insurance + wow)
+- **Status:** OPEN
+- **Track:** A · **Size:** M · **Depends on:** T-58, T-50, T-15
+- **Files:** `scripts/sim_team.py`, `demo/sandbox-repo/` (tiny app the bots work on)
+- Launch 2–3 HarnessRouter `claude-code` tasks in parallel (respect plan concurrency) as "bots" with Hive attached, each
+  given a ticket on the sandbox repo that **deliberately overlaps** (same module, conflicting library choice). Live, the radar
+  shows them, collisions fire, a bot's correction-like note becomes a proposal, and the guard catches a violation. That way the demo
+  doesn't depend on three humans typing at once.
+- **Done when:** one command produces the full demo storyline on the dashboard within about 5 min, and it's reproducible twice in a row.
+
+### T-36 · Backup demo video + screenshots
+- **Status:** OPEN
+- **Track:** any · **Size:** S · **Depends on:** T-30
+- Record the 3-minute demo end to end (screen and voiceover) plus 5 hero screenshots (radar with a collision, a decision with an evidence
+  quote, a denied edit, a `hive ask` answer, the impact strip). Commit them to `docs/media/` (or link them if they're big). Live demos fail, but a recording won't.
 
 ## Stretch (only after M2 works end to end)
 
@@ -441,3 +512,16 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Track:** C · **Size:** S · **Depends on:** T-17, T-09
 - On the decision detail page, show the version history (`GET /v1/memories/{id}/records/{rid}/history`), who proposed and who
   accepted it, the supersede chain, and the source (session/PR/thread).
+
+### T-46 · `hive catchup`: human morning digest
+- **Status:** OPEN
+- **Track:** A · **Size:** S · **Depends on:** T-57
+- A human-readable (not agent) digest of everything since a timestamp: rules added, who worked where, open questions,
+  stale context. Output as terminal markdown, plus an optional Slack-ready paste block.
+
+### T-47 · HarnessRouter trace links for background agents
+- **Status:** OPEN
+- **Track:** C · **Size:** S · **Depends on:** T-23, T-02
+- Each distiller/guard/arbiter/oracle run in the activity feed links to its HarnessRouter trace (`/v1/traces/{id}`) and
+  shows its cost. Judges get to see HarnessRouter doing the work.
+
