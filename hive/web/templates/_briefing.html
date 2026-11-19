@@ -1,0 +1,11 @@
+{% if error %}
+<p class="flash" role="alert">{{ error }}</p>
+{% elif brief %}
+<p class="briefing-meta">
+  What <strong>@{{ member }}</strong>'s agent receives{% if paths %} before editing <code>{{ paths | join(", ") }}</code>{% endif %}:
+  <span class="pill">{{ brief.token_estimate }} tokens</span>
+  <span class="pill">{{ binding }} binding rule{{ "" if binding == 1 else "s" }}</span>
+  <span class="pill">{{ brief.handoff_ids | length }} teammate note{{ "" if brief.handoff_ids | length == 1 else "s" }}</span>
+</p>
+<pre class="briefing">{{ brief.markdown }}</pre>
+{% endif %}

@@ -45,9 +45,10 @@ templates = Jinja2Templates(directory=WEB_DIR / "templates")
 
 # Dashboard nav, in order: (key, label, path). base.html renders it; each page marks its own key active.
 NAV = [
-    ("radar", "Radar", "/radar"),
-    ("decisions", "Decisions", "/decisions"),
-    ("timeline", "Timeline", "/timeline"),
+    ("home", "Home", "/"),
+    ("decisions", "Team rules", "/decisions"),
+    ("timeline", "Session notes", "/timeline"),
+    ("radar", "Live radar", "/radar"),
     ("ask", "Ask", "/ask"),
     ("impact", "Impact", "/impact"),
 ]
@@ -56,11 +57,18 @@ templates.env.globals["nav"] = NAV
 # Sections that are still a "coming soon" page: key -> what will be there. The ticket that builds a section
 # removes its entry here and adds its own route and template (which extends base.html).
 PLACEHOLDERS = {
-    "radar": "Who is working where, live, with collisions in red.",
-    "timeline": "What each teammate's agent learned, session by session.",
-    "ask": "Questions answered from a teammate's agent context, with citations.",
-    "impact": "Tokens saved, rules mined, violations caught, collisions warned.",
+    "radar": "See which teammate's agent is editing which files right now, and get warned before two agents "
+    "change the same file. (T-55)",
+    "timeline": "Everything your teammates' agents learned, session by session: what they built, the gotchas "
+    "they hit, and what's left to do. (T-18)",
+    "ask": "Ask a teammate's agent a question (\"why did you change the retry logic?\") and get an "
+    "answer from "
+    "its actual session, without interrupting your teammate. (T-53)",
+    "impact": "What Hive saved the team: tokens not spent re-reading code, rules learned, mistakes caught. "
+    "(T-24)",
 }
+# Unbuilt sections are shown dimmed with a "soon" pill in the nav.
+templates.env.globals["soon"] = set(PLACEHOLDERS)
 
 
 class DecisionService(Protocol):
@@ -157,14 +165,109 @@ def _board(store: ContextStore) -> dict[str, Any]:
     by_status = {status: [d for d in decisions if d.status is status] for status in DecisionStatus}
     return {
         "columns": [
-            ("Proposed", "proposed", by_status[DecisionStatus.PROPOSED]),
-            ("Accepted", "accepted", by_status[DecisionStatus.ACCEPTED]),
-            ("Superseded", "superseded", by_status[DecisionStatus.SUPERSEDED]),
+            ("Waiting for a human", "proposed", by_status[DecisionStatus.PROPOSED]),
+            ("Active rules", "accepted", by_status[DecisionStatus.ACCEPTED]),
+            ("Replaced", "superseded", by_status[DecisionStatus.SUPERSEDED]),
         ],
         "rejected": by_status[DecisionStatus.REJECTED],
         "titles": {d.id: d.title for d in decisions},
         "replaced_by": {d.supersedes: d for d in by_status[DecisionStatus.ACCEPTED] if d.supersedes},
     }
+
+
+def _home(store: ContextStore) -> dict[str, Any]:
+    """Template context for the home page (T-69): live counts for each step of the loop."""
+    decisions = store.list_decisions()
+    notes = store.list_handoffs(limit=50)
+    waiting = [d for d in decisions if d.status is DecisionStatus.PROPOSED]
+    active = [d for d in decisions if d.status is DecisionStatus.ACCEPTED]
+    people = sorted({h.member for h in notes})  # who wrote the notes
+    # A sensible default for the briefing preview: a file an active rule actually covers.
+    sample_path = "hive/api/app.py"
+    for d in active:
+        glob = next((g for g in d.scope if g not in ("**", "*")), "")
+        if glob:
+            sample_path = glob.replace("**", "").replace("*", "x").rstrip("/") or sample_path
+            if "." not in sample_path.rsplit("/", 1)[-1]:
+                sample_path = f"{sample_path}/app.py"
+            break
+    return {
+        "waiting": waiting,
+        "active_rules": active,
+        "notes": notes[:5],
+        "note_count": len(notes),
+        "people": people,
+        "empty": not decisions and not notes,
+        "sample_path": sample_path,
+    }
+
+
+def _seed_example(store: ContextStore) -> None:
+    """A tiny, realistic story for an empty dashboard. Everything is tagged as example data."""
+    from hive.models import Handoff as H
+
+    tag = ["example"]
+    store.put_decision(
+        Decision(
+            title="HTTP client is httpx",
+            statement="All HTTP calls use httpx with a timeout. Never add `requests`.",
+            rationale="One client means consistent timeouts and retries everywhere.",
+            evidence="no, don't add requests, we use httpx everywhere",
+            scope=["hive/**"],
+            status=DecisionStatus.ACCEPTED,
+            proposed_by="agent:bob",
+            decided_by="alice",
+            tags=tag,
+            source="example data",
+        )
+    )
+    store.put_decision(
+        Decision(
+            title="The HarnessRouter key never reaches the browser",
+            statement="Only the server calls HarnessRouter. "
+            "Pages talk to our own API, never to HarnessRouter directly.",
+            evidence="never call HarnessRouter from the browser, it leaks the key",
+            scope=["hive/web/**", "hive/api/**"],
+            status=DecisionStatus.ACCEPTED,
+            proposed_by="agent:carol",
+            decided_by="bob",
+            tags=tag,
+            source="example data",
+        )
+    )
+    store.put_decision(
+        Decision(
+            title="Tests never hit the network",
+            statement="Tests use the fakes in tests/fakes.py; nothing in tests/ calls a real API.",
+            evidence="tests must not hit the real API, use the fakes",
+            scope=["tests/**"],
+            status=DecisionStatus.PROPOSED,
+            proposed_by="agent:carol",
+            tags=tag,
+            source="example data",
+        )
+    )
+    store.put_handoff(
+        H(
+            member="bob",
+            branch="bob/feat/api-server",
+            ticket="example",
+            summary="Built the REST API for team rules.",
+            learned=["Rules are stored through the ContextStore protocol, never a concrete store."],
+            gotchas=["Accepting a rule must go through DecisionService, or the endpoint returns 500."],
+            files_touched=["hive/api/app.py"],
+        )
+    )
+    store.put_handoff(
+        H(
+            member="carol",
+            branch="carol/feat/redact",
+            ticket="example",
+            summary="Added secret redaction before transcripts leave the machine.",
+            learned=["Claude Code transcripts keep a second copy of every file read, under toolUseResult."],
+            files_touched=["hive/core/redact.py"],
+        )
+    )
 
 
 def create_app(
@@ -296,12 +399,36 @@ def create_app(
                 path, placeholder_page(key), response_class=HTMLResponse, include_in_schema=False
             )
 
-    # The dashboard opens on the first nav item.
-    home_key = NAV[0][0]
-    if home_key in PLACEHOLDERS:
-        app.add_api_route(
-            "/", placeholder_page(home_key), response_class=HTMLResponse, include_in_schema=False
-        )
+    # --- dashboard: home / "how Hive works" (T-69) ----------------------------
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    def home_page(request: Request) -> HTMLResponse:
+        context = {**_home(get_store()), "active": "home"}
+        return templates.TemplateResponse(request, "home.html", context)
+
+    @app.get("/ui/briefing", response_class=HTMLResponse, include_in_schema=False)
+    def ui_briefing(request: Request, member: str = "", path: str = "") -> HTMLResponse:
+        """The exact text Hive adds to an agent's context at session start, for `member` touching `path`."""
+        member = member.strip() or "new-teammate"
+        paths = [p.strip() for p in path.split(",") if p.strip()]
+        context: dict[str, Any] = {"member": member, "paths": paths, "brief": None, "error": None}
+        context["binding"] = 0
+        try:
+            composer = get_brief_composer()
+            store = get_store()
+            context["brief"] = brief = composer(member, f"{member}/work", paths, store=store)
+            accepted = {d.id for d in store.list_decisions(status=DecisionStatus.ACCEPTED)}
+            context["binding"] = sum(1 for i in brief.decision_ids if i in accepted)  # not pending ones
+        except HTTPException as e:
+            context["error"] = str(e.detail)
+        return templates.TemplateResponse(request, "_briefing.html", context)
+
+    @app.post("/ui/example-data", response_class=HTMLResponse, include_in_schema=False)
+    def ui_example_data(request: Request) -> HTMLResponse:
+        """Seed a small example story, only into an empty store, so a fresh dashboard explains itself."""
+        store = get_store()
+        if not (store.list_decisions() or store.list_handoffs(limit=1)):
+            _seed_example(store)
+        return HTMLResponse("", headers={"HX-Redirect": "/"})
 
     # --- dashboard: decisions board (T-17) ----------------------------------
     def render_board(request: Request, error: str | None = None, status_code: int = 200) -> HTMLResponse:
@@ -332,9 +459,9 @@ def create_app(
         def action() -> None:
             by = form.get("by", "")
             if not by:
-                raise HTTPException(422, "Enter your GitHub handle (top right) first.")
+                raise HTTPException(422, "Type your GitHub handle in “Your name” (top right) first.")
             if not form.get("title") or not form.get("statement"):
-                raise HTTPException(422, "A decision needs a title and a statement.")
+                raise HTTPException(422, "A rule needs a title and the rule itself.")
             _require_human(by)  # this form is the human path; agents propose through the API or MCP
             scope = [s.strip() for s in form.get("scope", "").split(",") if s.strip()] or ["**"]
             service = get_decisions()
@@ -360,7 +487,9 @@ def create_app(
         def action() -> None:
             by = form.get("by", "")
             if not by:
-                raise HTTPException(422, "Enter your GitHub handle (top right) before deciding.")
+                raise HTTPException(
+                    422, "Type your GitHub handle in “Your name” (top right) before approving or rejecting."
+                )
             _require_human(by)
             service = get_decisions()
             if verb == "accept":

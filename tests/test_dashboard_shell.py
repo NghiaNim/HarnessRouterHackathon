@@ -1,4 +1,4 @@
-"""T-27: dashboard shell. Every nav item renders the shell with a "coming soon" placeholder."""
+"""T-27 dashboard shell (+ T-69 nav): Home first, unbuilt sections dimmed and rendered as "coming soon"."""
 
 from __future__ import annotations
 
@@ -21,18 +21,33 @@ def client():
     store.close()
 
 
-def test_nav_is_the_five_sections_in_order():
-    assert [label for _, label, _ in NAV] == ["Radar", "Decisions", "Timeline", "Ask", "Impact"]
+NAV_LINK = re.compile(
+    r'<a href="(/[a-z]*)"\s*(aria-current="page")?\s*(?:class="soon"[^>]*)?>'
+    r'([^<]+?)\s*(?:<span class="pill">soon</span>)?</a>'
+)
+
+
+def test_nav_opens_on_home_then_rules_then_the_unbuilt_sections():
+    labels = [label for _, label, _ in NAV]
+    assert labels == ["Home", "Team rules", "Session notes", "Live radar", "Ask", "Impact"]
     assert set(PLACEHOLDERS) <= {key for key, _, _ in NAV}
+    assert "home" not in PLACEHOLDERS and "decisions" not in PLACEHOLDERS
 
 
 def test_root_renders_the_shell_with_the_full_nav(client):
     r = client.get("/")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/html")
-    links = re.findall(r'<a href="(/[a-z]*)"\s*(aria-current="page")?>(\w+)</a>', r.text)
+    links = NAV_LINK.findall(r.text)
     assert [(path, label) for path, _, label in links] == [(path, label) for _, label, path in NAV]
-    assert [label for _, current, label in links if current] == ["Radar"]  # opens on the first section
+    assert [label for _, current, label in links if current] == ["Home"]
+
+
+def test_unbuilt_sections_are_dimmed_with_a_soon_pill(client):
+    page = client.get("/").text
+    for key, label, path in NAV:
+        dimmed = re.search(rf'<a href="{re.escape(path)}"[^>]*class="soon"', page) is not None
+        assert dimmed == (key in PLACEHOLDERS), label
 
 
 @pytest.mark.parametrize(("key", "label", "path"), [item for item in NAV if item[0] in PLACEHOLDERS])
