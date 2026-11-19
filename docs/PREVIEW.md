@@ -4,6 +4,11 @@
 `scripts/preview.sh` builds **origin/main + every open PR** into a separate worktree (`../hive-preview`). Nothing is
 pushed, and your own checkout is never touched.
 
+## 0. One-time: make `uv` available
+
+If `uv --version` says *pyenv: uv: command not found*, run `brew install uv` (or `curl -LsSf https://astral.sh/uv/install.sh | sh`).
+The preview script finds a pyenv-hidden uv by itself, but you'll want it on PATH anyway.
+
 ## 1. Build the preview (about 1 min)
 
 ```bash
@@ -26,21 +31,22 @@ scripts/preview.sh --run             # → http://localhost:8000/decisions  (POR
 ```bash
 cd ../hive-preview
 export HIVE_STORE=sqlite HIVE_SQLITE_PATH=$PWD/.hive/hive.db HIVE_DB_PATH=$PWD/.hive/hive.db
+export PATH="$PWD/.venv/bin:$PATH"     # puts `hive` on PATH (no uv needed)
 
 # an "agent" proposes a rule (piping stdin makes it non-interactive, so it's labelled agent:bob)
-HIVE_MEMBER=bob uv run hive decide "All HTTP calls use httpx with a timeout; never requests." \
+HIVE_MEMBER=bob hive decide "All HTTP calls use httpx with a timeout; never requests." \
   --title "HTTP client is httpx" --scope "hive/**" </dev/null
 
 # the agent can't accept its own rule (exit 3)
-HIVE_MEMBER=bob uv run hive accept <id> </dev/null
+HIVE_MEMBER=bob hive accept <id> </dev/null
 ```
 Now open **http://localhost:8000/decisions**, type your handle in "You are", and click **Accept**. Then:
 ```bash
-uv run hive decisions --status accepted                 # the CLI sees the dashboard's accept
-HIVE_MEMBER=bob uv run hive handoff --summary "GOTCHA: accept must go through DecisionService" </dev/null
+hive decisions --status accepted                 # the CLI sees the dashboard's accept
+HIVE_MEMBER=bob hive handoff --summary "GOTCHA: accept must go through DecisionService" </dev/null
 echo '{"session_id":"s1","cwd":"'$PWD'","hook_event_name":"SessionStart"}' \
-  | HIVE_MEMBER=carol uv run hive brief --hook          # what Carol's Claude Code would receive at session start
-uv run hive recall httpx
+  | HIVE_MEMBER=carol hive brief --hook          # what Carol's Claude Code would receive at session start
+hive recall httpx
 ```
 
 ## 4. (Optional) Wire it into your real Claude Code
@@ -48,8 +54,8 @@ uv run hive recall httpx
 Until `hive install` lands (T-14), add this to `../hive-preview/.claude/settings.local.json` and start `claude` in `../hive-preview`:
 ```json
 { "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "uv run hive brief --hook" }] }],
-    "SessionEnd":   [{ "hooks": [{ "type": "command", "command": "uv run hive handoff --hook" }] }] } }
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.venv/bin/hive brief --hook" }] }],
+    "SessionEnd":   [{ "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.venv/bin/hive handoff --hook" }] }] } }
 ```
 The brief appears in the session's context. SessionEnd hands the transcript to the distiller in the background.
 

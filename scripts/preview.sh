@@ -8,6 +8,16 @@
 # Then: cd ../hive-preview && scripts/preview.sh --run   (see docs/PREVIEW.md)
 set -euo pipefail
 
+# Find uv even when a pyenv shim hides it (pyenv: "uv: command not found").
+UV="$(command -v uv 2>/dev/null || true)"
+if [ -z "$UV" ] || ! "$UV" --version >/dev/null 2>&1; then
+  UV=""
+  for c in "$HOME/.local/bin/uv" "$HOME/.cargo/bin/uv" /opt/homebrew/bin/uv /usr/local/bin/uv "$HOME"/.pyenv/versions/*/bin/uv; do
+    if [ -x "$c" ] && "$c" --version >/dev/null 2>&1; then UV="$c"; break; fi
+  done
+fi
+[ -n "$UV" ] || { echo "uv not found: install it with 'brew install uv' (or curl -LsSf https://astral.sh/uv/install.sh | sh)"; exit 1; }
+
 if [[ "${1:-}" == "--run" ]]; then
   # Start the API + dashboard on the preview's local SQLite store.
   set -a; [ -f .env ] && . ./.env; set +a
@@ -16,7 +26,7 @@ if [[ "${1:-}" == "--run" ]]; then
   mkdir -p "$(dirname "$HIVE_SQLITE_PATH")"
   echo "store: $HIVE_SQLITE_PATH"
   echo "open:  http://localhost:${PORT:-8000}/decisions"
-  exec uv run uvicorn hive.api.app:app --port "${PORT:-8000}" --reload
+  exec "$UV" run uvicorn hive.api.app:app --port "${PORT:-8000}" --reload
 fi
 
 REPO="$(git rev-parse --show-toplevel)"
@@ -43,7 +53,7 @@ for row in $(gh pr list --state open --json number,headRefName --jq 'sort_by(.nu
 done
 
 # .env lives in the MAIN checkout (worktrees don't share untracked files). Replace a placeholder copy.
-MAIN="$(cd "$(git -C "$REPO" rev-parse --git-common-dir)/.." && pwd)"
+MAIN="$(cd "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 if [ ! -f .env ] || grep -q 'REPLACE_ME' .env; then
   if [ -f "$MAIN/.env" ]; then cp "$MAIN/.env" .env; elif [ -f "$REPO/.env" ]; then cp "$REPO/.env" .env;
   else cp .env.example .env; echo "  ! no .env found: paste HARNESS_ROUTER_KEY into $(pwd)/.env"; fi
@@ -53,8 +63,8 @@ if ! grep -q '^HIVE_STORE=' .env; then
   echo 'HIVE_STORE=sqlite' >> .env                   # HarnessRouter memory needs credit (T-39)
 fi
 
-uv sync -q
-uv run ruff check . -q && echo "lint: ok"
-uv run pytest -q 2>&1 | tail -1
+"$UV" sync -q
+"$UV" run ruff check . -q && echo "lint: ok"
+"$UV" run pytest -q 2>&1 | tail -1
 echo
 echo "next:  cd $(pwd) && scripts/preview.sh --run"
