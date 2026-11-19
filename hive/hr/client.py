@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from dotenv import dotenv_values, find_dotenv
 
 DEFAULT_BASE_URL = "https://api.harnessrouter.ai"
 TERMINAL_STATUSES = {"completed", "failed", "incomplete", "cancelled"}
@@ -101,6 +102,7 @@ class HRClient:
         max_retries: int = 3,
         backoff: float = 0.5,
         poll_interval: float = 2.0,
+        max_retry_after: float = 30.0,
         sleep: Callable[[float], None] = time.sleep,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
@@ -110,6 +112,7 @@ class HRClient:
         self.max_retries = max_retries
         self.backoff = backoff
         self.poll_interval = poll_interval
+        self.max_retry_after = max_retry_after  # never let a server freeze a hook/CLI for long (T-19)
         self._sleep = sleep
         self._http = httpx.Client(
             base_url=self.base_url,
@@ -120,8 +123,15 @@ class HRClient:
 
     @classmethod
     def from_env(cls, **kw: Any) -> HRClient:
-        base = os.environ.get("HARNESS_ROUTER_URL") or DEFAULT_BASE_URL
-        return cls(os.environ.get("HARNESS_ROUTER_KEY", ""), base, **kw)
+        """Key/base URL from the environment, falling back to the nearest `.env` (env vars win; .env is not
+        loaded into os.environ). TODO: build from `hive.config.get_settings()` once T-05 (#9) lands."""
+        path = find_dotenv(usecwd=True)
+        file_vals = dotenv_values(path) if path else {}
+
+        def get(name: str) -> str:
+            return (os.environ.get(name) or file_vals.get(name) or "").strip()
+
+        return cls(get("HARNESS_ROUTER_KEY"), get("HARNESS_ROUTER_URL") or DEFAULT_BASE_URL, **kw)
 
     def close(self) -> None:
         self._http.close()
@@ -146,7 +156,7 @@ class HRClient:
     def _delay(self, attempt: int, resp: httpx.Response | None) -> float:
         if resp is not None:
             try:
-                return float(resp.headers["retry-after"])
+                return min(float(resp.headers["retry-after"]), self.max_retry_after)
             except (KeyError, ValueError):
                 pass
         return self.backoff * (2**attempt)

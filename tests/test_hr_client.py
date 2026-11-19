@@ -52,6 +52,21 @@ def test_requires_key():
         HRClient("")
 
 
+def test_from_env_falls_back_to_dotenv_file(monkeypatch, tmp_path):
+    (tmp_path / ".env").write_text(
+        "HARNESS_ROUTER_KEY=sk-hr-fromfile\nHARNESS_ROUTER_URL=https://file.test\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("HARNESS_ROUTER_KEY", raising=False)
+    monkeypatch.delenv("HARNESS_ROUTER_URL", raising=False)
+    with HRClient.from_env() as c:
+        assert c.base_url == "https://file.test"
+        assert c._http.headers["authorization"] == "Bearer sk-hr-fromfile"
+    monkeypatch.setenv("HARNESS_ROUTER_KEY", "sk-hr-env")  # real env wins
+    with HRClient.from_env() as c:
+        assert c._http.headers["authorization"] == "Bearer sk-hr-env"
+
+
 def test_from_env(monkeypatch):
     monkeypatch.setenv("HARNESS_ROUTER_KEY", "sk-hr-env")
     monkeypatch.delenv("HARNESS_ROUTER_URL", raising=False)
@@ -99,6 +114,18 @@ def test_retries_429_with_retry_after_then_succeeds(client, sleeps):
     )
     assert client.models() == {"claude": {}}
     assert sleeps == [2.0]
+
+
+@respx.mock
+def test_retry_after_is_capped(client, sleeps):
+    respx.get(f"{BASE}/v1/models").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "3600"}, json={"error": {"code": "rate_limited"}}),
+            httpx.Response(200, json={"backends": {}}),
+        ]
+    )
+    client.models()
+    assert sleeps == [client.max_retry_after]
 
 
 @respx.mock
