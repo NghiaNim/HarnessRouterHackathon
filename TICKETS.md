@@ -32,7 +32,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - Package layout, `hive/models.py` + `hive/store/base.py` contracts, docs, this board, `scripts/ticket.py`.
 
 ### T-01 · Spike: choose memory provider + bootstrap the memory tree
-- **Status:** OPEN
+- **Status:** CLAIMED @NghiaNim 2026-11-18
 - **Track:** A · **Size:** M · **Depends on:** —
 - **Files:** `scripts/spike_memory.py` (throwaway OK), `docs/harnessrouter-api.md`
 - Create `hive/<project>` with children `decisions`, `handoffs`, `codebase` (`POST /v1/memories` with `parent_id`)
