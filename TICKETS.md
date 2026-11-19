@@ -67,7 +67,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** running it twice creates no duplicate harnesses, and the JSON helper is tested with a fake client.
 
 ### T-04 · SqliteStore + `get_store()` factory + shared store contract tests
-- **Status:** IN REVIEW @NghiaNim PR #8
+- **Status:** DONE @NghiaNim PR #8
 - **Track:** A · **Size:** M · **Depends on:** —
 - **Files:** `hive/store/sqlite.py`, `hive/store/__init__.py` (`get_store()` factory from `HIVE_STORE`),
   `tests/test_store_contract.py`
