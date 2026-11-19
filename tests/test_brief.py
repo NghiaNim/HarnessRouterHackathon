@@ -4,11 +4,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from hive.core.brief import compose_brief, estimate_tokens, ticket_files
-from hive.models import Decision, DecisionStatus, Handoff, ModuleNote
+from hive.core.brief import _overlap, compose_brief, estimate_tokens, select_handoffs, ticket_files
+from hive.models import Decision, DecisionStatus, Handoff, HiveEvent, ModuleNote
 from hive.store.sqlite import SqliteStore
 
-T0 = datetime(2026, 11, 10, 9, 0, tzinfo=UTC)
+# Relative to now: the brief only considers handoffs from the last 7 days (T-67).
+T0 = datetime.now(UTC).replace(microsecond=0) - timedelta(days=2)
 
 
 def at(hours: int) -> datetime:
@@ -359,3 +360,131 @@ def test_big_store_respects_budget_and_keeps_handoffs(big_store, tmp_path, paths
     assert len(brief.decision_ids) == len(applicable) or (
         f"+{len(applicable) - len(brief.decision_ids)} more rule(s) apply" in brief.markdown
     )
+
+
+# --- T-67: handoffs ranked by path relevance, not just time --------------------
+
+
+def _bob_carol_store(now):
+    s = SqliteStore(":memory:")
+    s.put_handoff(
+        Handoff(
+            id="hbobapi001",
+            member="bob",
+            branch="bob/feat/api",
+            summary="Wired accept/reject routes.",
+            gotchas=["accept must go through the DecisionService wrappers or it 500s"],
+            files_touched=["hive/api/app.py", "tests/test_api.py"],
+            created_at=now - timedelta(hours=2),
+        )
+    )
+    s.put_handoff(
+        Handoff(
+            id="hcarol0099",
+            member="carol",
+            branch="carol/feat/css",
+            summary="Tweaked dashboard colors.",
+            files_touched=["hive/web/static/app.css"],
+            created_at=now - timedelta(minutes=5),
+        )
+    )
+    return s
+
+
+def test_ticket_repro_carol_gets_bobs_gotcha_on_the_same_file():
+    now = datetime.now(UTC)
+    s = _bob_carol_store(now)
+    brief = compose_brief("carol", "carol/feat/api2", ["hive/api/app.py"], store=s, now=now)
+    assert brief.handoff_ids == ["hbobapi001"]  # carol's own handoff is never shown back to her
+    assert "## Related to your files" in brief.markdown
+    assert "_(touched `hive/api/app.py`)_" in brief.markdown
+    assert "accept must go through the DecisionService wrappers" in brief.markdown
+
+
+def test_older_same_file_handoff_outranks_unrelated_recent_one():
+    now = datetime.now(UTC)
+    s = _bob_carol_store(now)
+    s.put_handoff(  # dave: unrelated and brand new
+        Handoff(
+            id="hdave00001",
+            member="dave",
+            branch="d/x",
+            summary="docs",
+            files_touched=["README.md"],
+            created_at=now - timedelta(minutes=1),
+        )
+    )
+    related, recent, why = select_handoffs("erin", ["hive/api/app.py"], s, now)
+    assert [h.id for h in related] == ["hbobapi001"]
+    # carol's app.css shares the top-level package `hive` (tier 1), so it beats dave's newer README (tier 0)
+    assert [h.id for h in recent] == ["hcarol0099", "hdave00001"]
+    assert why == {"hbobapi001": "hive/api/app.py"}
+    brief = compose_brief("erin", "e/x", ["hive/api/app.py"], store=s, now=now)
+    assert brief.handoff_ids[0] == "hbobapi001"
+
+
+def test_related_handoff_survives_a_tight_budget_before_recent_ones():
+    now = datetime.now(UTC)
+    s = _bob_carol_store(now)
+    full = compose_brief("erin", "e/x", ["hive/api/app.py"], store=s, now=now)
+    tight = compose_brief(
+        "erin", "e/x", ["hive/api/app.py"], store=s, now=now, budget_tokens=full.token_estimate - 5
+    )
+    assert tight.handoff_ids == ["hbobapi001"]
+
+
+def test_brief_served_event_marks_my_last_session():
+    now = datetime.now(UTC)
+    s = _bob_carol_store(now)
+    # erin was briefed 1 hour ago: bob's (2 h, unrelated to her files) is old news, carol's (5 min) is new.
+    s.log_event(HiveEvent(type="brief_served", actor="erin", at=now - timedelta(hours=1)))
+    s.log_event(HiveEvent(type="brief_served", actor="someone-else", at=now))
+    brief = compose_brief("erin", "e/x", ["docs/x.md"], store=s, now=now)
+    assert brief.handoff_ids == ["hcarol0099"]
+    # ...but a related handoff is shown even though it predates her last brief.
+    assert compose_brief("erin", "e/x", ["hive/api/app.py"], store=s, now=now).handoff_ids[0] == "hbobapi001"
+
+
+def test_handoffs_older_than_the_window_are_ignored():
+    now = datetime.now(UTC)
+    s = _bob_carol_store(now)
+    s.put_handoff(
+        Handoff(
+            id="hancient01",
+            member="bob",
+            branch="b/old",
+            summary="old",
+            files_touched=["hive/api/app.py"],
+            created_at=now - timedelta(days=8),
+        )
+    )
+    assert "hancient01" not in compose_brief("erin", "e/x", ["hive/api/app.py"], store=s, now=now).handoff_ids
+
+
+@pytest.mark.parametrize(
+    ("touched", "focus", "score"),
+    [
+        (["hive/api/app.py"], ["hive/api/app.py"], 3),
+        (["./hive\\api\\app.py"], ["hive/api/app.py"], 3),  # normalized
+        (["hive/api/routes.py"], ["hive/api/app.py"], 2),  # same directory
+        (["hive/api/sub/x.py"], ["hive/api/"], 2),  # inside a focus directory
+        (["hive/core/brief.py"], ["hive/api/app.py"], 1),  # same top-level package
+        (["README.md"], ["pyproject.toml"], 0),  # root files don't share a "directory"
+        (["docs/a.md"], ["hive/api/app.py"], 0),
+        ([], ["hive/api/app.py"], 0),
+    ],
+)
+def test_overlap_tiers(touched, focus, score):
+    assert _overlap(touched, focus)[0] == score
+
+
+def test_no_priority_inversion_at_any_budget():
+    """A lower-priority handoff is never shown while the related one is dropped or loses its gotcha."""
+    now = datetime.now(UTC)
+    s = _bob_carol_store(now)
+    full = compose_brief("erin", "e/x", ["hive/api/app.py"], store=s, now=now)
+    for budget in range(1, full.token_estimate + 1):
+        b = compose_brief("erin", "e/x", ["hive/api/app.py"], store=s, now=now, budget_tokens=budget)
+        assert b.token_estimate <= budget
+        if "hcarol0099" in b.handoff_ids:
+            assert b.handoff_ids[0] == "hbobapi001" and "wrappers or it 500s" in b.markdown

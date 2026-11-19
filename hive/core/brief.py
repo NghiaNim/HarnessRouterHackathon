@@ -2,9 +2,12 @@
 
 Sections, highest priority first:
   1. accepted decisions in scope (binding), most specific scope first
-  2. teammates' handoffs since my last session (newest first, my own skipped)
-  3. module notes for the touched files/directories
-  4. proposed decisions in scope, as a "pending" footnote
+  2. teammates' handoffs related to my files (same file or directory, last HANDOFF_WINDOW), however old
+  3. teammates' other handoffs since my last session
+  4. module notes for the touched files/directories
+  5. proposed decisions in scope, as a "pending" footnote
+Handoffs are ranked by path overlap with my focus paths (same file > same directory > same top-level
+package) plus a recency bonus that never outweighs one overlap tier (T-67).
 
 The budget is a HARD cap (`token_estimate <= budget_tokens`, tokens = len/4). Rules first get at most
 RULES_SHARE of it, so teammates' handoffs always get the rest they need; any budget left over at the end
@@ -12,18 +15,21 @@ flows back to rules. Only the top FULL_RULES rules show their statement; the res
 rules that still don't fit become "+N more rules apply" with a pointer to look them up. A binding rule is
 never dropped silently.
 
-"My last session" = the newest handoff by `member`. With no changed paths (the normal SessionStart case),
-focus paths are inferred from the ticket's `Files:` line in TICKETS.md (the given ticket, else the member's
-CLAIMED tickets) and this branch's previous handoffs. With no focus at all, only repo-wide rules (`**`) apply.
+"My last session" = my latest `brief_served` event or my latest handoff, whichever is newer.
+
+With no changed paths (the normal SessionStart case), focus paths are inferred from the ticket's `Files:`
+line in TICKETS.md (the given ticket, else the member's CLAIMED tickets) and this branch's previous
+handoffs. With no focus at all, only repo-wide rules (`**`) apply.
 """
 
 from __future__ import annotations
 
 import os
 import re
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from hive.models import Brief, Decision, DecisionStatus, Handoff, ModuleNote
+from hive.models import Brief, Decision, DecisionStatus, Handoff, ModuleNote, utcnow
 from hive.store.base import ContextStore
 
 MAX_LIST_ITEMS = 3  # learned/gotchas per handoff
@@ -32,6 +38,8 @@ RULES_SHARE = 0.55  # first-pass cap for accepted rules; leftovers flow back to 
 FULL_RULES = 8  # rules rendered with their full statement; the rest are compact
 MAX_FOCUS_PATHS = 50
 REPO_WIDE = "**"
+HANDOFF_WINDOW = timedelta(days=7)
+RELATED_SCORE = 2  # same directory or closer: shown even if older than my last session
 
 
 def estimate_tokens(text: str) -> int:
@@ -92,9 +100,10 @@ def _specificity(d: Decision) -> float:
     return max((one(p) for p in d.scope), default=0.0)
 
 
-def _render_handoff(h: Handoff) -> str:
+def _render_handoff(h: Handoff, touched: str | None = None) -> str:
     ticket = f" ({h.ticket})" if h.ticket else ""
-    lines = [f"- **{h.member}** on `{h.branch}`{ticket}: {h.summary}"]
+    where = f" _(touched `{touched}`)_" if touched else ""
+    lines = [f"- **{h.member}** on `{h.branch}`{ticket}{where}: {h.summary}"]
     lines += [f"  - learned: {x}" for x in h.learned[:MAX_LIST_ITEMS]]
     lines += [f"  - gotcha: {x}" for x in h.gotchas[:MAX_LIST_ITEMS]]
     return "\n".join(lines)
@@ -153,16 +162,19 @@ def _pack_lines(heading: str, rendered: list[tuple[str, object]], quota: int) ->
     return ("\n".join(lines) + "\n", taken) if taken else ("", [])
 
 
-def _pack_handoffs(handoffs: list[Handoff], quota: int) -> tuple[str, list[Handoff]]:
-    heading = "## Since your last session"
-    block, taken = _pack_lines(heading, [(_render_handoff(h), h) for h in handoffs], quota)
+def _pack_handoffs(
+    handoffs: list[Handoff], quota: int, heading: str = "## Since your last session", why: dict | None = None
+) -> tuple[str, list[Handoff]]:
+    why = why or {}
+    rendered = [(_render_handoff(h, why.get(h.id)), h) for h in handoffs]
+    block, taken = _pack_lines(heading, rendered, quota)
     if handoffs and not taken:
-        # The newest handoff alone is too big: keep a shortened headline rather than none at all.
-        h = handoffs[0]
-        prefix = f"- **{h.member}** on `{h.branch}`: "
-        room = (quota - 1) * 4 - len(heading) - len(prefix) - 4  # chars left after heading, newlines, "…"
-        if room >= 20:
-            block, taken = _pack_lines(heading, [(prefix + h.summary[:room].rstrip() + "…", h)], quota)
+        # The top handoff alone is too big: cut its full entry (gotchas included) to fill the whole quota,
+        # rather than dropping it or shrinking it to a headline that leaves room for lower-priority items.
+        text = rendered[0][0]
+        room = quota * 4 - len(heading) - 4  # chars: quota minus heading, 2 newlines, the joining "\n", "…"
+        if room >= 40:
+            block, taken = _pack_lines(heading, [(text[:room].rstrip() + "…", handoffs[0])], quota)
     return block, taken
 
 
@@ -180,6 +192,68 @@ def _pack_pending(pending: list[Decision], quota: int) -> tuple[str, list[Decisi
     if not taken:
         return "", []
     return head + "; ".join(f"{x.title} ({x.proposed_by})" for x in taken) + "\n", taken
+
+
+# --- handoff relevance (T-67) ---------------------------------------------------------------------------
+
+
+def _overlap(touched: list[str], focus: list[str]) -> tuple[int, str | None]:
+    """Best path overlap: 3 same file, 2 same directory (or inside a focus dir), 1 same top-level package."""
+    best: tuple[int, str | None] = (0, None)
+    for f in (_normalize(t) for t in touched if t.strip()):
+        for p in focus:
+            if f == p:
+                score = 3
+            elif f.startswith(p.rstrip("/") + "/") or (
+                os.path.dirname(f) and os.path.dirname(f) == os.path.dirname(p)
+            ):
+                score = 2
+            elif "/" in f and "/" in p and f.split("/", 1)[0] == p.split("/", 1)[0]:
+                score = 1
+            else:
+                continue
+            if score > best[0]:
+                best = (score, f)
+    return best
+
+
+def _recency_bonus(h: Handoff, now: datetime) -> float:
+    created = h.created_at if h.created_at.tzinfo else h.created_at.replace(tzinfo=UTC)
+    age = max((now - created).total_seconds(), 0.0)
+    return 0.5 * max(0.0, 1 - age / HANDOFF_WINDOW.total_seconds())  # < 1, so it never beats an overlap tier
+
+
+def _last_seen(member: str, store: ContextStore) -> datetime | None:
+    """When `member` last got context: their latest brief_served event or their latest handoff."""
+    seen = [h.created_at for h in store.list_handoffs(member=member, limit=1)]
+    list_events = getattr(store, "list_events", None)  # T-08; tolerate stores that predate it
+    if list_events is not None:
+        seen += [e.at for e in list_events(limit=500) if e.type == "brief_served" and e.actor == member][:1]
+    seen = [t if t.tzinfo else t.replace(tzinfo=UTC) for t in seen]
+    return max(seen, default=None)
+
+
+def select_handoffs(
+    member: str, focus: list[str], store: ContextStore, now: datetime
+) -> tuple[list[Handoff], list[Handoff], dict[str, str]]:
+    """(related to my files, new since my last session, {handoff id: overlapping path}), each best first."""
+    last = _last_seen(member, store)
+    candidates = [h for h in store.list_handoffs(since=now - HANDOFF_WINDOW, limit=500) if h.member != member]
+    scored = {h.id: _overlap(h.files_touched, focus) for h in candidates}
+
+    def rank(h: Handoff) -> float:
+        return scored[h.id][0] + _recency_bonus(h, now)
+
+    related = sorted((h for h in candidates if scored[h.id][0] >= RELATED_SCORE), key=rank, reverse=True)
+    related_ids = {h.id for h in related}
+
+    def is_new(h: Handoff) -> bool:
+        created = h.created_at if h.created_at.tzinfo else h.created_at.replace(tzinfo=UTC)
+        return last is None or created > last
+
+    recent = sorted((h for h in candidates if h.id not in related_ids and is_new(h)), key=rank, reverse=True)
+    why = {h.id: path for h in related if (path := scored[h.id][1])}
+    return related, recent, why
 
 
 # --- focus inference for an empty change set (T-59) ------------------------------------------------------
@@ -236,6 +310,7 @@ def compose_brief(
     *,
     store: ContextStore | None = None,
     tickets_path: Path | None = None,
+    now: datetime | None = None,
 ) -> Brief:
     if store is None:
         from hive.store import get_store
@@ -261,9 +336,7 @@ def compose_brief(
     accepted.sort(key=lambda d: (_specificity(d), d.decided_at or d.created_at), reverse=True)
     pending = [d for d in store.list_decisions(status=DecisionStatus.PROPOSED) if in_focus(d)]
 
-    mine = store.list_handoffs(member=member, limit=1)
-    since = mine[0].created_at if mine else None
-    handoffs = [h for h in store.list_handoffs(since=since, limit=50) if h.member != member]
+    related, recent, why = select_handoffs(member, paths, store, now or utcnow())
 
     notes = [n for n in store.list_module_notes() if paths and _note_touched(n, paths)]
 
@@ -273,17 +346,22 @@ def compose_brief(
 
     def build(
         reserve: int,
-    ) -> tuple[str, list[Decision], list[Handoff], list[ModuleNote], list[Decision], int]:
+    ) -> tuple[str, list[Decision], list[Handoff], list[Handoff], list[ModuleNote], list[Decision], int]:
         avail = budget_tokens - _cost(header) - reserve
         # Pass 1: rules capped at RULES_SHARE, then each lower section gets what's left, in priority order.
-        quotas = [int(avail * RULES_SHARE), 0, 0, 0]
+
+        def pack_related(items: list[Handoff], quota: int) -> tuple[str, list[Handoff]]:
+            return _pack_handoffs(items, quota, "## Related to your files", why)
+
         packers = [
             (_pack_rules, accepted),
-            (_pack_handoffs, handoffs),
+            (pack_related, related),
+            (_pack_handoffs, recent),
             (_pack_notes, notes),
             (_pack_pending, pending),
         ]
-        blocks, taken = [""] * 4, [[] for _ in range(4)]
+        quotas = [int(avail * RULES_SHARE)] + [0] * (len(packers) - 1)
+        blocks, taken = [""] * len(packers), [[] for _ in packers]
         for i, (pack, items) in enumerate(packers):
             if i:
                 quotas[i] = avail - sum(_cost(b) for b in blocks)
@@ -301,10 +379,11 @@ def compose_brief(
             body.append(EMPTY)
         return "\n".join([header, *body]), *taken, omitted
 
-    markdown, rules, kept_handoffs, kept_notes, kept_pending, omitted = build(0)
+    markdown, rules, kept_related, kept_recent, kept_notes, kept_pending, omitted = build(0)
     if omitted or estimate_tokens(markdown) > budget_tokens:
-        reserve = max(_cost(_omitted_line(9999)), _cost(EMPTY))
-        markdown, rules, kept_handoffs, kept_notes, kept_pending, omitted = build(reserve)
+        most_omitted = len(related) + len(recent) + len(notes) + len(pending)
+        reserve = _cost(_omitted_line(most_omitted)) if most_omitted else _cost(EMPTY)
+        markdown, rules, kept_related, kept_recent, kept_notes, kept_pending, omitted = build(reserve)
     if estimate_tokens(markdown) > budget_tokens:  # a budget smaller than the header itself
         markdown = markdown[: max(budget_tokens, 0) * 4]
 
@@ -314,6 +393,6 @@ def compose_brief(
         markdown=markdown,
         token_estimate=estimate_tokens(markdown),
         decision_ids=[d.id for d in rules] + [d.id for d in kept_pending],
-        handoff_ids=[h.id for h in kept_handoffs],
+        handoff_ids=[h.id for h in kept_related + kept_recent],
         module_paths=[n.path for n in kept_notes],
     )
