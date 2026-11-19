@@ -1,0 +1,55 @@
+<section id="board" data-swap-errors hx-get="/ui/decisions/board" hx-trigger="every 5s" hx-swap="outerHTML">
+  {% if error %}<p class="flash" role="alert">{{ error }}</p>{% endif %}
+  <div class="columns">
+    {% for label, key, decisions in columns %}
+    <div class="column column-{{ key }}">
+      <h2>{{ label }} <span class="count">{{ decisions | length }}</span></h2>
+      {% for d in decisions %}
+      <article class="card" id="d-{{ d.id }}">
+        <h3>{{ d.title }}</h3>
+        <p class="statement">{{ d.statement }}</p>
+        {% if d.evidence %}<blockquote class="evidence">“{{ d.evidence }}”</blockquote>{% endif %}
+        {% if d.rationale %}<p class="rationale">{{ d.rationale }}</p>{% endif %}
+        <p class="chips">
+          {% for glob in d.scope %}<code class="chip">{{ glob }}</code>{% endfor %}
+        </p>
+        <p class="meta">
+          {% if d.proposed_by.startswith("agent:") %}
+          <span class="badge badge-agent">proposed by {{ d.proposed_by }}</span>
+          {% else %}
+          <span class="badge">proposed by @{{ d.proposed_by }}</span>
+          {% endif %}
+          {% if d.decided_by %}<span class="badge badge-human">{{ key }} by @{{ d.decided_by }}</span>{% endif %}
+        </p>
+        {% if d.supersedes %}
+        <p class="link">Supersedes <a href="#d-{{ d.supersedes }}">{{ titles.get(d.supersedes, d.supersedes) }}</a></p>
+        {% endif %}
+        {% if replaced_by.get(d.id) %}
+        <p class="link">Superseded by <a href="#d-{{ replaced_by[d.id].id }}">{{ replaced_by[d.id].title }}</a></p>
+        {% endif %}
+        {% if key == "proposed" %}
+        <div class="actions">
+          <button class="accept" hx-post="/ui/decisions/{{ d.id }}/accept" hx-include="#me"
+                  hx-target="#board" hx-swap="outerHTML">Accept</button>
+          <button class="reject" hx-post="/ui/decisions/{{ d.id }}/reject" hx-include="#me"
+                  hx-prompt="Reason for rejecting (optional)" hx-target="#board" hx-swap="outerHTML">Reject</button>
+        </div>
+        {% endif %}
+      </article>
+      {% else %}
+      <p class="none">Nothing {{ label | lower }}.</p>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  {% if rejected %}
+  <details class="rejected">
+    <summary>{{ rejected | length }} rejected</summary>
+    <ul>
+      {% for d in rejected %}
+      <li id="d-{{ d.id }}"><strong>{{ d.title }}</strong> · proposed by {{ d.proposed_by }}{% if d.decided_by %}, rejected by @{{ d.decided_by }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</section>

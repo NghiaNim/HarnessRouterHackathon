@@ -35,8 +35,8 @@ def test_root_renders_the_shell_with_the_full_nav(client):
     assert [label for _, current, label in links if current] == ["Radar"]  # opens on the first section
 
 
-@pytest.mark.parametrize(("key", "label", "path"), NAV)
-def test_each_nav_item_shows_coming_soon_and_is_marked_active(client, key, label, path):
+@pytest.mark.parametrize(("key", "label", "path"), [item for item in NAV if item[0] in PLACEHOLDERS])
+def test_each_unbuilt_section_shows_coming_soon_and_is_marked_active(client, key, label, path):
     r = client.get(path)
     assert r.status_code == 200
     assert f"<h1>{label}</h1>" in r.text
