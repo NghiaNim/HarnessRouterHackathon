@@ -43,7 +43,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   `docs/harnessrouter-api.md` (replace the "verify in T-01" note), and spike memories are deleted or clearly named.
 
 ### T-02 · HarnessRouter HTTP client
-- **Status:** CLAIMED @NghiaNim 2026-11-18
+- **Status:** IN REVIEW @NghiaNim PR #10
 - **Track:** A · **Size:** M · **Depends on:** —
 - **Files:** `hive/hr/client.py`, `tests/test_hr_client.py`
 - `HRClient(api_key, base_url)` on httpx: bearer auth, `Idempotency-Key` on POSTs, error envelope mapped to
