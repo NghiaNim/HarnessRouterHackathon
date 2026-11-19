@@ -88,7 +88,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   offers a batch write, use it (from PR #17's review).
 
 ### T-05 · Config & identity
-- **Status:** IN REVIEW @Odysseyc PR #9
+- **Status:** DONE @Odysseyc PR #9
 - **Track:** B · **Size:** S · **Depends on:** —
 - **Files:** `hive/config.py`, `tests/test_config.py`
 - `Settings` loaded from `.env` (python-dotenv): key, project, store, api url.
