@@ -127,7 +127,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 ## M1 · MVP loop (decision → brief → handoff, end to end)
 
 ### T-10 · Decision lifecycle service
-- **Status:** OPEN
+- **Status:** CLAIMED @Odysseyc 2026-11-18
 - **Track:** A · **Size:** M · **Depends on:** T-04 (Sqlite)
 - **Files:** `hive/core/decisions.py`, `tests/test_decisions.py`
 - `propose(...)`, `accept(id, by)`, `reject(id, by, reason)`, `supersede(old_id, new)`, `in_scope(paths)`.
