@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import re
 
 import pytest
@@ -43,19 +45,23 @@ def test_each_nav_item_shows_coming_soon_and_is_marked_active(client, key, label
     assert re.findall(r'<a href="([^"]+)"\s+aria-current="page"', r.text) == [path]
 
 
-def test_scripts_are_pinned_with_integrity_and_local_assets_are_served(client):
+# sha384 of the upstream files on unpkg (htmx.org@2.0.4/dist/htmx.min.js, htmx-ext-sse@2.2.2/sse.js).
+VENDOR = "/static/vendor/"
+VENDORED = {
+    VENDOR + "htmx-2.0.4.min.js": "HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+",
+    VENDOR + "htmx-ext-sse-2.2.2.js": "fw+eTlCc7suMV/1w/7fr2/PmwElUIt5i82bi+qTiLXvjRXZ2/FkiTNA/w0MhXnGI",
+}
+
+
+def test_scripts_are_vendored_unmodified_and_nothing_loads_from_the_network(client):
     page = client.get("/").text
-    external = re.findall(
-        r'<script src="(https://[^"]+)"\s+integrity="(sha384-[^"]+)"\s+crossorigin="anonymous"', page
-    )
-    assert [src for src, _ in external] == [
-        "https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js",
-        "https://unpkg.com/htmx-ext-sse@2.2.2/sse.js",
-    ]
-    assert len(re.findall(r"<script src=\"https://", page)) == len(external)  # none without integrity
-    for asset in ("/static/app.css", "/static/app.js"):
-        assert asset in page
-        assert client.get(asset).status_code == 200
+    assert re.findall(r'<script src="([^"]+)"', page) == [*VENDORED, "/static/app.js"]
+    assert not re.findall(r'(?:src|href)="https?://', page)
+    for path, sha384 in VENDORED.items():
+        body = client.get(path).content
+        assert base64.b64encode(hashlib.sha384(body).digest()).decode() == sha384
+    assert client.get("/static/app.css").status_code == 200
+    assert client.get("/static/app.js").status_code == 200
 
 
 def test_shell_never_exposes_harnessrouter_to_the_browser(client):
