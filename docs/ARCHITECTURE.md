@@ -56,7 +56,7 @@ hive/
   store/base.py          CONTRACT  ContextStore protocol                                         (all, via contract PR)
   config.py              B  settings (.env), identity (gh login → git user), project id          T-05
   store/sqlite.py        A  SqliteStore: local/offline + tests                                    T-04
-  store/memory.py        A  HarnessMemoryStore: HarnessRouter Memory API                          T-04
+  store/memory.py        A  HarnessMemoryStore: HarnessRouter Memory API                          T-09
   hr/client.py           A  HarnessRouter HTTP client: auth, retries, errors, SSE, memory calls   T-02
   hr/harnesses.py        A  idempotent provisioning of our harnesses → harnessrouter.json        T-03
   agents/distiller.py    A  transcript/diff → Handoff (+ proposed decisions)                      T-15

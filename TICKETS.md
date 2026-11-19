@@ -66,15 +66,22 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - Add a `run_json(harness, input, model_cls)` helper that strips code fences, validates, and retries once on a parse failure.
 - **Done when:** running it twice creates no duplicate harnesses, and the JSON helper is tested with a fake client.
 
-### T-04 · Store implementations (SQLite + HarnessRouter Memory)
+### T-04 · SqliteStore + `get_store()` factory + shared store contract tests
 - **Status:** IN REVIEW @NghiaNim PR #8
-- **Track:** A · **Size:** L · **Depends on:** T-01, T-02 (SqliteStore depends on nothing, so do it first)
-- **Files:** `hive/store/sqlite.py`, `hive/store/memory.py`, `hive/store/__init__.py` (`get_store()` factory
-  from `HIVE_STORE`), `tests/test_store_contract.py`
-- One shared **contract test suite**, parametrized over both stores (the memory store runs only with `HIVE_LIVE=1`).
-- `SqliteStore.recall` can be a simple LIKE/keyword score. `HarnessMemoryStore` follows the mapping table in
-  ARCHITECTURE.md and stores the model JSON in `attributes` so it round-trips exactly.
-- **Done when:** both stores pass the same suite. **Ship SqliteStore early as its own PR**, because B and C build on it.
+- **Track:** A · **Size:** M · **Depends on:** —
+- **Files:** `hive/store/sqlite.py`, `hive/store/__init__.py` (`get_store()` factory from `HIVE_STORE`),
+  `tests/test_store_contract.py`
+- A **contract test suite** that any `ContextStore` must pass, parametrized so T-09 can plug the memory store in.
+  `SqliteStore.recall` can be a simple LIKE/keyword score.
+- **Done when:** SqliteStore passes the suite. B and C build on it.
+
+### T-09 · HarnessMemoryStore (HarnessRouter Memory API)
+- **Status:** OPEN
+- **Track:** A · **Size:** L · **Depends on:** T-01, T-02, T-04
+- **Files:** `hive/store/memory.py`, register it in `hive/store/__init__.py`, plus a param in `tests/test_store_contract.py`
+- Follow the mapping table in ARCHITECTURE.md. Store the model JSON in `attributes` so it round-trips exactly. Use the
+  `decisions`/`handoffs`/`intents`/`codebase` children under the project root memory, with the provider chosen in T-01.
+- **Done when:** it passes the same contract suite with `HIVE_LIVE=1`, and `HIVE_STORE=memory` works end to end for `hive decisions`.
 
 ### T-05 · Config & identity
 - **Status:** IN REVIEW @Odysseyc PR #9
@@ -113,7 +120,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
   `Handoff.transcript_file_id: str|None` (the HarnessRouter file id of the trimmed transcript, used by `hive ask`, T-53).
 - New store methods: `log_event`, `list_events(since, limit)`, `put_intent` (upsert), and
   `list_intents(active_within_minutes=15)`. These are additive only.
-- **Done when:** merged with approval from both other members, and the stores (T-04/T-52) know they need to implement it.
+- **Done when:** merged with approval from both other members, and the stores (T-04/T-09/T-52) know they need to implement it.
 
 ---
 
@@ -244,7 +251,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 
 ### T-52 · Intent storage in both stores
 - **Status:** OPEN
-- **Track:** A · **Size:** S · **Depends on:** T-08, T-04
+- **Track:** A · **Size:** S · **Depends on:** T-08, T-04, T-09
 - **Files:** `hive/store/sqlite.py`, `hive/store/memory.py`
 - `put_intent` upserts by `(member, branch)`. In the memory store, use an `intents` child memory with one record per member+branch
   that is PATCHed, not appended (keep memory ops low). `list_intents(active_within_minutes)` filters by heartbeat.
@@ -351,7 +358,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 
 ### T-33 · Dogfood: run Hive on this repo for all 3 members
 - **Status:** OPEN
-- **Track:** any · **Size:** S · **Depends on:** T-14, T-04 (memory store), T-19
+- **Track:** any · **Size:** S · **Depends on:** T-14, T-09, T-19
 - Commit the `hive install` output for this repo and have every member's Claude Code use it for the rest of the
   hackathon. Seed the real decisions we've already made (the stack table in ARCHITECTURE.md, "humans decide, agents
   propose", contract rule) as accepted decisions. Collect 2–3 real "it caught/saved us" moments for the pitch in `docs/DEMO.md`.
@@ -405,6 +412,6 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 
 ### T-45 · Decision history & provenance view
 - **Status:** OPEN
-- **Track:** C · **Size:** S · **Depends on:** T-17, T-04 (memory store)
+- **Track:** C · **Size:** S · **Depends on:** T-17, T-09
 - On the decision detail page, show the version history (`GET /v1/memories/{id}/records/{rid}/history`), who proposed and who
   accepted it, the supersede chain, and the source (session/PR/thread).
