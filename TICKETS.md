@@ -169,7 +169,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** the Bob/Carol repro includes Bob's gotcha, and a test shows that an unrelated recent handoff ranks below an older same-file handoff.
 
 ### T-48 · BUG: scope globs need gitignore semantics
-- **Status:** CLAIMED @NghiaNim 2026-11-18
+- **Status:** IN REVIEW @NghiaNim PR #24
 - **Track:** any · **Size:** S · **Depends on:** — (behavior-only contract PR on `Decision.applies_to`; all active members review)
 - `fnmatch` gets the semantics wrong (verified): `hive/*.py` matches `hive/sub/deep.py`, `**/test_*.py` doesn't match root
   `test_x.py`, and a plain directory scope `hive/api` or `hive/api/` matches **nothing**, which is exactly what humans will type.
