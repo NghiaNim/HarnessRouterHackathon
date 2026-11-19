@@ -32,11 +32,13 @@ indexers (Cursor, Augment, Sourcegraph) all store and retrieve notes. **Hive's w
 | Asking a teammate's agent a question | Slack | None | **`hive ask @bob`** answers from Bob's agent's actual context |
 | Staleness | Rots silently | Rots silently | **Tied to commits.** Stale context is flagged or dropped. |
 | Agent harness | Tool-specific | Usually one | **Any harness** (Claude Code hooks, MCP, AGENTS.md), via HarnessRouter |
+| Secrets | Whatever you paste | Whatever the agent saves | **Redacted before anything leaves the machine** |
 
 ### The four pillars
 
 1. **Corrections become rules.** You already correct your agent ("no, use httpx"). Hive turns that sentence into a proposed
-   decision, a human approves it with one click, and every agent gets it when it touches files in scope. The Guard enforces it.
+   decision, a human approves it with one click, and every agent gets it when it touches files in scope. Mechanical rules
+   are enforced **at edit time** (a forbid pattern denies the write in < 50 ms, T-56), and everything else by the Guard on the diff.
 2. **Collision radar.** Every agent session broadcasts an *intent* (ticket and paths). Before an agent edits a file that a
    teammate's agent is working on right now, it gets warned. The dashboard shows who's working where.
 3. **Ask the agent, not the person.** `hive ask @bob "why did you switch to polling?"` answers from Bob's session handoffs and
