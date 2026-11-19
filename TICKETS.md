@@ -112,7 +112,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** T-10/T-11/T-15/T-16 can be tested with no network and no key.
 
 ### T-08 · Contract addition: `HiveEvent`, `BriefLog`, `Intent`, evidence fields
-- **Status:** IN REVIEW @NghiaNim PR #12
+- **Status:** DONE @NghiaNim PR #12
 - **Track:** any · **Size:** S · **Depends on:** — (contract PR, so all other active members review) · **Blocks the M1.5 differentiators, so do it soon**
 - **Files:** `hive/models.py`, `hive/store/base.py`, `tests/test_contract.py`
 - `HiveEvent(id, type: decision_proposed|decision_accepted|decision_rejected|handoff_written|brief_served|check_run|
