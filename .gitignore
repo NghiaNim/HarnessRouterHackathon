@@ -224,3 +224,6 @@ __marimo__/
 # Claude Code (personal, per-user)
 CLAUDE.local.md
 .claude/settings.local.json
+
+# Hive local store
+.hive/
