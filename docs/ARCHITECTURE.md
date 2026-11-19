@@ -141,3 +141,6 @@ HIVE_API_URL=http://localhost:8000  # dashboard/server
 - **One exception type per concern:** `hive.config.MissingKeyError`/`ConfigError` for setup and `hive.hr.client.HRError` for API
   errors. Callers (CLI, MCP, API) turn these into friendly messages. Never print a stack trace to the user.
 - **Rebase on `main` before requesting review** so CI (ruff + pytest) runs against the current lint config.
+- **Core services are module-level functions with a keyword-only `store=`** (e.g. `compose_brief(..., store=store)`,
+  `decisions.accept(id, by, store=store)`), so the CLI, MCP and API all inject the same store. Use standard exceptions at
+  the service boundary: `NotFound`→404, `PermissionError`→403, `ValueError`→409. (From PR #13 and PR #15.)

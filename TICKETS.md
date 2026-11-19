@@ -130,7 +130,13 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Status:** CLAIMED @Odysseyc 2026-11-18
 - **Track:** A · **Size:** M · **Depends on:** T-04 (Sqlite)
 - **Files:** `hive/core/decisions.py`, `tests/test_decisions.py`
-- `propose(...)`, `accept(id, by)`, `reject(id, by, reason)`, `supersede(old_id, new)`, `in_scope(paths)`.
+- **Interface (agreed, because PR #15's API server and PR #13's brief composer already call it this way):** module-level functions that take
+  the store as a keyword argument.
+  `propose(*, title, statement, proposed_by, rationale="", scope=["**"], tags=[], source=None, evidence=None, supersedes=None, store) -> Decision`,
+  `accept(decision_id, by, *, store) -> Decision`, `reject(decision_id, by, reason, *, store) -> Decision`,
+  `supersede(old_id, new: Decision, *, by, store) -> Decision`, `in_scope(paths, *, store) -> list[Decision]` (accepted only).
+  Errors: `hive.store.base.NotFound` (unknown id), `PermissionError` (agent actor), `ValueError` (invalid transition).
+  If you need to deviate, comment on PR #15 so the adapter in `hive/api/app.py` changes in the same pass.
 - **Trust rule:** `accept`/`reject` refuse when `by` starts with `agent:`. Accepting a decision whose `supersedes` is
   set marks the old one `SUPERSEDED`.
 - **Done when:** the state machine is fully unit-tested, including the agent-can't-accept rule.
