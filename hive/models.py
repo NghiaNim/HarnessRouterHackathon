@@ -7,7 +7,7 @@ renaming/removing fields needs a contract PR reviewed by both other members. See
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from fnmatch import fnmatch
 from typing import Literal, Union
@@ -46,6 +46,7 @@ class Decision(BaseModel):
     supersedes: str | None = Field(default=None, description="Decision.id this replaces")
     tags: list[str] = Field(default_factory=list)
     source: str | None = Field(default=None, description="Where it came from: PR url, Slack link, session id")
+    evidence: str | None = Field(default=None, description="Verbatim human quote it was mined from (T-15)")
 
     def applies_to(self, path: str) -> bool:
         return any(fnmatch(path, pattern) for pattern in self.scope)
@@ -66,6 +67,9 @@ class Handoff(BaseModel):
     next_steps: list[str] = Field(default_factory=list)
     commit_sha: str | None = None
     hr_session_id: str | None = Field(default=None, description="HarnessRouter session that produced it")
+    transcript_file_id: str | None = Field(
+        default=None, description="HarnessRouter file id of the trimmed transcript (used by `hive ask`, T-53)"
+    )
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -116,3 +120,57 @@ class ArbiterVerdict(BaseModel):
     duplicate_of: str | None = None
     contradicts: list[str] = Field(default_factory=list)
     note: str = ""
+
+
+HiveEventType = Literal[
+    "decision_proposed",
+    "decision_accepted",
+    "decision_rejected",
+    "handoff_written",
+    "brief_served",
+    "check_run",
+    "collision_warned",
+    "question_answered",
+]
+
+
+class HiveEvent(BaseModel):
+    """Something that happened in Hive. Feeds the live activity feed (T-23) and the impact counters (T-24)."""
+
+    id: str = Field(default_factory=new_id)
+    type: HiveEventType
+    actor: str = Field(description="Member handle, or 'agent:<handle>'")
+    ref_id: str | None = Field(default=None, description="Id of the Decision/Handoff/... it is about, if any")
+    at: datetime = Field(default_factory=utcnow)
+    summary: str = ""
+
+
+class BriefLog(BaseModel):
+    """One served brief, for the tokens-saved meter (T-24). `baseline_tokens` is an estimate."""
+
+    member: str
+    branch: str
+    tokens: int
+    baseline_tokens: int
+    at: datetime = Field(default_factory=utcnow)
+
+
+class Intent(BaseModel):
+    """What one member's agent is working on right now (T-50/T-51). Upsert key: (member, branch)."""
+
+    id: str = Field(default_factory=new_id)
+    member: str
+    branch: str
+    ticket: str | None = Field(default=None, description="e.g. 'T-08'")
+    summary: str = ""
+    paths: list[str] = Field(default_factory=list, description="Files the agent has edited this session")
+    started_at: datetime = Field(default_factory=utcnow)
+    heartbeat_at: datetime = Field(default_factory=utcnow)
+    ended_at: datetime | None = None
+
+    def is_active(self, within_minutes: float = 15, now: datetime | None = None) -> bool:
+        """Not ended, and heartbeat within the window. Naive datetimes are treated as UTC."""
+        if self.ended_at is not None:
+            return False
+        hb = self.heartbeat_at if self.heartbeat_at.tzinfo else self.heartbeat_at.replace(tzinfo=timezone.utc)
+        return (now or utcnow()) - hb <= timedelta(minutes=within_minutes)

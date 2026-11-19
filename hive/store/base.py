@@ -9,7 +9,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
-from hive.models import Decision, DecisionStatus, Handoff, ItemKind, ModuleNote, RecallHit
+from hive.models import (
+    Decision,
+    DecisionStatus,
+    Handoff,
+    HiveEvent,
+    Intent,
+    ItemKind,
+    ModuleNote,
+    RecallHit,
+)
 
 
 class NotFound(KeyError):
@@ -58,4 +67,22 @@ class ContextStore(Protocol):
         self, query: str, kinds: list[ItemKind] | None = None, limit: int = 8
     ) -> list[RecallHit]:
         """Relevance-ranked search across kinds (all kinds if None)."""
+        ...
+
+    # --- activity feed (T-08) ------------------------------------------------
+    def log_event(self, event: HiveEvent) -> HiveEvent:
+        """Append-only."""
+        ...
+
+    def list_events(self, since: datetime | None = None, limit: int = 50) -> list[HiveEvent]:
+        """Events strictly after `since` (naive = UTC). Newest first."""
+        ...
+
+    # --- intents (T-08) ------------------------------------------------------
+    def put_intent(self, intent: Intent) -> Intent:
+        """Upsert by (member, branch): the new intent fully replaces the old one."""
+        ...
+
+    def list_intents(self, active_within_minutes: float | None = 15) -> list[Intent]:
+        """Intents where `is_active(active_within_minutes)`, or all if None. Newest heartbeat first."""
         ...
