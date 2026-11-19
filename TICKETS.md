@@ -310,7 +310,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** someone can accept an agent-proposed decision in the UI and `hive decisions` shows it as accepted.
 
 ### T-18 · Dashboard: team timeline (handoffs)
-- **Status:** OPEN
+- **Status:** CLAIMED @itsjoshzhang 2026-11-18
 - **Track:** C · **Size:** S · **Depends on:** T-27, T-16
 - A feed of handoffs per member and branch, with expandable learned/gotchas/open questions. Link to the HarnessRouter
   session share link when there is one.
