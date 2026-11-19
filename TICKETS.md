@@ -253,6 +253,17 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** a fixture transcript seeded with each secret type comes out clean, and the distiller and memory store call
   `redact()` on every outbound path (assert it in their tests).
 
+### T-65 · Secret scanning on commits + a shared redaction corpus
+- **Status:** OPEN
+- **Track:** B · **Size:** S · **Depends on:** T-06, T-28
+- All three of us have the shared `sk-hr-` key locally, and our **agents commit constantly**. T-28 protects what Hive sends out, but nothing
+  stops a secret landing in git. Add a `gitleaks` GitHub Action on every PR (with a custom rule for `sk-hr-[A-Za-z0-9_-]{8,}`), plus an
+  optional pre-commit hook installed by `hive install`.
+- Move the probe strings from PR #18's review (`toolUseResult` file copies, `{"password": …}` dicts, `Bearer …`,
+  `scheme://user:pw@host`, Slack `xox…`, Google `AIza…`, Stripe `sk_live_…`) into `tests/fixtures/secrets_corpus.jsonl` (built from fragments
+  at runtime so the scanner doesn't flag the fixture itself). Both `redact()` and gitleaks are tested against it, so regressions fail CI.
+- **Done when:** a PR that adds a fake `sk-hr-…` fails CI, and the corpus test is green on `redact()`.
+
 ### T-16 · API server (REST)
 - **Status:** IN REVIEW @itsjoshzhang PR #15
 - **Track:** C · **Size:** M · **Depends on:** T-04 (Sqlite), T-10
