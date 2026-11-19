@@ -1,12 +1,14 @@
 """T-01 spike: which HarnessRouter memory provider round-trips Hive records? (throwaway)
 
-For each provider: build `hive-spike-<provider>` with children decisions/handoffs/codebase, write a record with
-title + attributes, read it back, recall by query and by attributes.kind filter, PATCH it, and recall from the root.
+For each provider: build `hive-spike-<provider>` with children decisions/handoffs/codebase, write a record
+with title + attributes, read it back, recall by query and by attributes.kind filter, PATCH it, and recall
+from the root.
 Prints one compact line per step; the full log goes to the path given as argv[1] (default: spike_memory.log).
 
 Costs ~10 memory ops per provider (~$0.002 each). Usage:
     uv run python scripts/spike_memory.py [log_path] [provider ...]
 """
+# ruff: noqa: B023  (each lambda is invoked immediately by step())
 
 from __future__ import annotations
 
