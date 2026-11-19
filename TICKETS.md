@@ -66,7 +66,7 @@ live feed, demo). Anyone can take any track. The tracks only exist to keep file 
 - **Done when:** running it twice creates no duplicate harnesses, and the JSON helper is tested with a fake client.
 
 ### T-04 · Store implementations (SQLite + HarnessRouter Memory)
-- **Status:** CLAIMED @NghiaNim 2026-11-18
+- **Status:** IN REVIEW @NghiaNim PR #8
 - **Track:** A · **Size:** L · **Depends on:** T-01, T-02 (SqliteStore depends on nothing, so do it first)
 - **Files:** `hive/store/sqlite.py`, `hive/store/memory.py`, `hive/store/__init__.py` (`get_store()` factory
   from `HIVE_STORE`), `tests/test_store_contract.py`
