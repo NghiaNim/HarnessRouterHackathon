@@ -43,6 +43,11 @@ def test_reads_env_file_with_inline_comments(tmp_path):
     assert (s.project, s.store, s.api_url) == ("demo", "sqlite", "http://hive.local:9000")
 
 
+def test_db_path_matches_store_factory_env_var():
+    assert Settings.load(env_file="", environ={}).db_path == ".hive/hive.db"
+    assert Settings.load(env_file="", environ={"HIVE_DB_PATH": "x/h.db"}).db_path == "x/h.db"
+
+
 def test_real_env_overrides_env_file(tmp_path):
     env = tmp_path / ".env"
     env.write_text("HIVE_PROJECT=from-file\nHARNESS_ROUTER_KEY=sk-hr-file\n", encoding="utf-8")

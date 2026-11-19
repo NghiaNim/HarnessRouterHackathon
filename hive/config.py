@@ -27,7 +27,7 @@ STORE_KINDS: tuple[str, ...] = ("memory", "sqlite")
 DEFAULT_HR_BASE_URL = "https://api.harnessrouter.ai"
 DEFAULT_PROJECT = "harness-router-hackathon"
 DEFAULT_API_URL = "http://localhost:8000"
-DEFAULT_SQLITE_PATH = ".hive/hive.db"
+DEFAULT_DB_PATH = ".hive/hive.db"
 PLACEHOLDER_KEY = "sk-hr-REPLACE_ME"
 SUBPROCESS_TIMEOUT_S = 3.0
 
@@ -47,7 +47,7 @@ class Settings:
     store: StoreKind = "memory"
     api_url: str = DEFAULT_API_URL
     hr_base_url: str = DEFAULT_HR_BASE_URL
-    sqlite_path: str = DEFAULT_SQLITE_PATH
+    db_path: str = DEFAULT_DB_PATH
     env_file: str | None = field(default=None, compare=False)
 
     @property
@@ -86,7 +86,7 @@ class Settings:
             store=store,  # type: ignore[arg-type]
             api_url=get("HIVE_API_URL", DEFAULT_API_URL).rstrip("/"),
             hr_base_url=get("HARNESS_ROUTER_URL", DEFAULT_HR_BASE_URL).rstrip("/"),
-            sqlite_path=get("HIVE_SQLITE_PATH", DEFAULT_SQLITE_PATH),
+            db_path=get("HIVE_DB_PATH", DEFAULT_DB_PATH),
             env_file=path or None,
         )
 
